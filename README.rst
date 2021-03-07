@@ -23,11 +23,13 @@ Configure bot scopes
 * ``chat:write``
 * ``im:history``
 * ``users:read``
+* ``channels:read``
 
 Configure subscrived events
 ---------------------------
 
 * ``message.im``
+* ``message.channels``
 
 Installation
 ============
