@@ -46,18 +46,33 @@ As python packege
 As plain source coude
 ---------------------
 
-#. Copy ``errbot_slack_bolt_backend/slackbolt.py`` and ``errbot_slack_bolt_backend/slackbolt.plug`` from GitHub to some directory. 
-#. Set directory path to ``BOT_EXTRA_BACKEND_DIR`` of your ``config.py``.
+#. | Clone repository into your workspace from GitHub.
+   | example: ``git clone https://github.com/attakei-lab/errbot-slack-bolt-backend.git``
+#. | Set directory path to ``BOT_EXTRA_BACKEND_DIR`` of your ``config.py``.
+   | example: ``BOT_EXTRA_BACKEND_DIR = 'errbot-slack-bolt-backend/errbot_slack_bolt_backend'``
 
 Post install
 ------------
 
-(TBD)
+Set configuration to your ``config.py``.
+
+.. code-block:: python
+
+   BACKEND = "SlackBolt"
+   BOT_IDENTITY = {
+       # Required
+       "app_token": "YOUR-APP-LEVEL-TOKEN",
+       "bot_token": "YOUR-BOT-USER-TOKEN",
+       "bot_userid": "YOUR-BOT-USERID-FROM-WORKSPACE",
+   }
 
 Implementations
 ===============
 
 This does not yet implement all features of built-in Slack/SlackRTM backend.
+
+- Response of direct message
+- Response of post in joined channels
 
 License
 =======
