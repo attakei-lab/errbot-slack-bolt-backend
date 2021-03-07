@@ -1,0 +1,10 @@
+[Core]
+Name = SlackBolt
+Module = slackbolt
+
+[Documentation]
+Description = Sladk backend by Slack Bolt
+
+[Errbot]
+Min = 6.1.17
+Max = 6.1.17
