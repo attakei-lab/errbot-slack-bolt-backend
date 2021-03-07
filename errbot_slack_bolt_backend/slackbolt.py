@@ -36,13 +36,14 @@ log = logging.getLogger(__name__)
 
 
 try:
-    from slack import RTMClient, WebClient
-    from slack.errors import BotUserAccessError
+    from slack_bolt import App
+    from slack_bolt.adapter.socket_mode import SocketModeHandler
+    from slack_sdk.web import WebClient
 except ImportError:
-    log.exception("Could not start the SlackRTM backend")
+    log.exception("Could not start the SlackBolt backend")
     log.fatal(
-        "You need to install slackclient in order to use the Slack backend.\n"
-        "You can do `pip install errbot[slack-rtm]` to install it."
+        "You need to install slack-bolt in order to use the Slack backend.\n"
+        "You can do `pip install slack-bolt` to install it."
     )
     sys.exit(1)
 
@@ -335,14 +336,14 @@ class SlackRoomBot(RoomOccupant, SlackBot):
         return other.room.id == self.room.id and other.userid == self.userid
 
 
-class SlackRTMBackend(ErrBot):
+class SlackBoltBackend(ErrBot):
     @staticmethod
     def _unpickle_identifier(identifier_str):
-        return SlackRTMBackend.__build_identifier(identifier_str)
+        return SlackBoltBackend.__build_identifier(identifier_str)
 
     @staticmethod
     def _pickle_identifier(identifier):
-        return SlackRTMBackend._unpickle_identifier, (str(identifier),)
+        return SlackBoltBackend._unpickle_identifier, (str(identifier),)
 
     def _register_identifiers_pickling(self):
         """
@@ -352,27 +353,29 @@ class SlackRTMBackend(ErrBot):
         But for the unpickling to work we need to use bot.build_identifier, hence the bot parameter here.
         But then we also need bot for the unpickling so we save it here at module level.
         """
-        SlackRTMBackend.__build_identifier = self.build_identifier
+        SlackBoltBackend.__build_identifier = self.build_identifier
         for cls in (SlackPerson, SlackRoomOccupant, SlackRoom):
             copyreg.pickle(
                 cls,
-                SlackRTMBackend._pickle_identifier,
-                SlackRTMBackend._unpickle_identifier,
+                SlackBoltBackend._pickle_identifier,
+                SlackBoltBackend._unpickle_identifier,
             )
 
     def __init__(self, config):
         super().__init__(config)
         identity = config.BOT_IDENTITY
-        self.token = identity.get("token", None)
-        self.proxies = identity.get("proxies", None)
-        if not self.token:
+        self.bot_token = identity.get("bot_token", None)
+        self.app_token = identity.get("app_token", None)
+        self.bot_userid = identity.get("bot_userid", None)
+        if not (self.bot_token and self.app_token and self.bot_userid):
             log.fatal(
                 'You need to set your token (found under "Bot Integration" on Slack) in '
                 "the BOT_IDENTITY setting in your configuration. Without this token I "
                 "cannot connect to Slack."
             )
             sys.exit(1)
-        self.sc = None  # Will be initialized in serve_once
+        self.bot_app = None
+        self.bot_handler = None
         self.webclient = None
         self.bot_identifier = None
         compact = config.COMPACT_OUTPUT if hasattr(config, "COMPACT_OUTPUT") else False
@@ -408,43 +411,21 @@ class SlackRTMBackend(ErrBot):
         log.debug("Converted bot_alt_prefixes: %s", self.bot_config.BOT_ALT_PREFIXES)
 
     def _setup_slack_callbacks(self):
-        @RTMClient.run_on(event="message")
-        def serve_messages(**payload):
-            self._message_event_handler(payload["web_client"], payload["data"])
-
-        @RTMClient.run_on(event="member_joined_channel")
-        def serve_joins(**payload):
-            self._member_joined_channel_event_handler(
-                payload["web_client"], payload["data"]
-            )
-
-        @RTMClient.run_on(event="hello")
-        def serve_hellos(**payload):
-            self._hello_event_handler(payload["web_client"], payload["data"])
-
-        @RTMClient.run_on(event="presence_change")
-        def serve_presences(**payload):
-            self._presence_change_event_handler(payload["web_client"], payload["data"])
+        @self.bot_app.message(re.compile(r".*"))
+        def serve_messages(event):
+            log.debug(event)
+            self._message_event_handler(self.bot_app.client, event)
 
     def serve_forever(self):
-        self.sc = RTMClient(token=self.token, proxy=self.proxies)
+        self.bot_app = App(token=self.bot_token)
+        self.bot_identifier = SlackPerson(self.bot_app.client, self.bot_userid)
 
-        @RTMClient.run_on(event="open")
-        def get_bot_identity(**payload):
-            self.bot_identifier = SlackPerson(
-                payload["web_client"], payload["data"]["self"]["id"]
-            )
-            # only hook up the message callback once we have our identity set.
-            self._setup_slack_callbacks()
+        self._hello_event_handler(self.bot_app.client, None)
+        self._setup_slack_callbacks()
 
-        # log.info('Verifying authentication token')
-        # self.auth = self.api_call("auth.test", raise_errors=False)
-        # if not self.auth['ok']:
-        #     raise SlackAPIResponseError(error=f"Couldn't authenticate with Slack. Server said: {self.auth['error']}")
-        # log.debug("Token accepted")
-
-        log.info("Connecting to Slack real-time-messaging API")
-        self.sc.start()
+        log.info("Connecting to Slack socket")
+        self.bot_handler = SocketModeHandler(self.bot_app, self.app_token)
+        self.bot_handler.start()
         # Inject bot identity to alternative prefixes
         self.update_alternate_prefixes()
 
