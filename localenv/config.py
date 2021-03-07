@@ -27,4 +27,3 @@ BOT_IDENTITY = {
     "bot_token": os.environ["SLACK_BOT_TOKEN"],
     "bot_userid": os.environ["SLACK_BOT_USERID"],
 }
-print(BOT_IDENTITY)

@@ -22,6 +22,7 @@ Configure bot scopes
 
 * ``chat:write``
 * ``im:history``
+* ``users:read``
 
 Configure subscrived events
 ---------------------------
