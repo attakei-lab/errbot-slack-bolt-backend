@@ -366,8 +366,7 @@ class SlackBoltBackend(ErrBot):
         identity = config.BOT_IDENTITY
         self.bot_token = identity.get("bot_token", None)
         self.app_token = identity.get("app_token", None)
-        self.bot_userid = identity.get("bot_userid", None)
-        if not (self.bot_token and self.app_token and self.bot_userid):
+        if not (self.bot_token and self.app_token):
             log.fatal(
                 'You need to set your token (found under "Bot Integration" on Slack) in '
                 "the BOT_IDENTITY setting in your configuration. Without this token I "
@@ -418,7 +417,9 @@ class SlackBoltBackend(ErrBot):
 
     def serve_forever(self):
         self.bot_app = App(token=self.bot_token)
-        self.bot_identifier = SlackPerson(self.bot_app.client, self.bot_userid)
+
+        auth_test = self.bot_app.client.auth_test()
+        self.bot_identifier = SlackPerson(self.bot_app.client, auth_test["user_id"])
 
         self._hello_event_handler(self.bot_app.client, None)
         self._setup_slack_callbacks()

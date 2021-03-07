@@ -25,5 +25,4 @@ BOT_ADMINS = ('@CHANGE_ME', )
 BOT_IDENTITY = {
     "app_token": os.environ["SLACK_APP_TOKEN"],
     "bot_token": os.environ["SLACK_BOT_TOKEN"],
-    "bot_userid": os.environ["SLACK_BOT_USERID"],
 }

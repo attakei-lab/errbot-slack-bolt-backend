@@ -63,7 +63,6 @@ Set configuration to your ``config.py``.
        # Required
        "app_token": "YOUR-APP-LEVEL-TOKEN",
        "bot_token": "YOUR-BOT-USER-TOKEN",
-       "bot_userid": "YOUR-BOT-USERID-FROM-WORKSPACE",
    }
 
 Implementations
