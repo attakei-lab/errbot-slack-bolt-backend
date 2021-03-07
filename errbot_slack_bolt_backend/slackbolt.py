@@ -374,7 +374,6 @@ class SlackBoltBackend(ErrBot):
             )
             sys.exit(1)
         self.bot_app = None
-        self.bot_handler = None
         self.webclient = None
         self.bot_identifier = None
         compact = config.COMPACT_OUTPUT if hasattr(config, "COMPACT_OUTPUT") else False
@@ -420,19 +419,17 @@ class SlackBoltBackend(ErrBot):
 
         auth_test = self.bot_app.client.auth_test()
         self.bot_identifier = SlackPerson(self.bot_app.client, auth_test["user_id"])
-
         self._hello_event_handler(self.bot_app.client, None)
         self._setup_slack_callbacks()
 
-        log.info("Connecting to Slack socket")
-        self.bot_handler = SocketModeHandler(self.bot_app, self.app_token)
-        self.bot_handler.start()
-        # Inject bot identity to alternative prefixes
         self.update_alternate_prefixes()
 
+
         try:
-            while True:
-                sleep(1)
+            log.info("Connecting to Slack socket")
+            handler = SocketModeHandler(self.bot_app, self.app_token)
+            handler.start()
+            # Inject bot identity to alternative prefixes
         except KeyboardInterrupt:
             log.info("Interrupt received, shutting down..")
             return True
