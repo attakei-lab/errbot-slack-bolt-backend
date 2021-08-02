@@ -635,7 +635,7 @@ class SlackBoltBackend(ErrBot):
     def get_im_channel(self, id_):
         """Open a direct message channel to a user"""
         try:
-            response = self.webclient.im_open(user=id_)
+            response = self.webclient.conversations_open(users=id_)
             return response["channel"]["id"]
         except SlackAPIResponseError as e:
             if e.error == "cannot_dm_bot":
