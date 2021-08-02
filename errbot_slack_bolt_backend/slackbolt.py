@@ -1022,7 +1022,7 @@ class SlackBoltBackend(ErrBot):
 
             ts = self._ts_for_message(msg)
 
-            self.api_call(
+            self.webclient.api_call(
                 method,
                 data={"channel": to_channel_id, "timestamp": ts, "name": reaction},
             )
