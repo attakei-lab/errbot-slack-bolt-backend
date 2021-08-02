@@ -593,12 +593,12 @@ class SlackBoltBackend(ErrBot):
         name = name.lstrip("#")
         channel = [
             channel
-            for channel in self.webclient.channels_list()
-            if channel.name == name
+            for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]
+            if channel["name"] == name
         ]
         if not channel:
             raise RoomDoesNotExistError(f"No channel named {name} exists")
-        return channel[0].id
+        return channel[0]["id"]
 
     def channels(self, exclude_archived=True, joined_only=False):
         """
@@ -635,7 +635,7 @@ class SlackBoltBackend(ErrBot):
     def get_im_channel(self, id_):
         """Open a direct message channel to a user"""
         try:
-            response = self.webclient.im_open(user=id_)
+            response = self.webclient.conversations_open(users=id_)
             return response["channel"]["id"]
         except SlackAPIResponseError as e:
             if e.error == "cannot_dm_bot":
@@ -1022,7 +1022,7 @@ class SlackBoltBackend(ErrBot):
 
             ts = self._ts_for_message(msg)
 
-            self.api_call(
+            self.webclient.api_call(
                 method,
                 data={"channel": to_channel_id, "timestamp": ts, "name": reaction},
             )
@@ -1156,7 +1156,7 @@ class SlackRoom(Room):
         The channel object exposed by SlackClient
         """
         _id = None
-        for channel in self.webclient.conversations_list()["channels"]:
+        for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]:
             if channel["name"] == self.name:
                 _id = channel["id"]
                 break
