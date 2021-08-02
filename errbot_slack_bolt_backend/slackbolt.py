@@ -593,7 +593,7 @@ class SlackBoltBackend(ErrBot):
         name = name.lstrip("#")
         channel = [
             channel
-            for channel in self.webclient.conversations_list()["channels"]
+            for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]
             if channel["name"] == name
         ]
         if not channel:
@@ -1156,7 +1156,7 @@ class SlackRoom(Room):
         The channel object exposed by SlackClient
         """
         _id = None
-        for channel in self.webclient.conversations_list()["channels"]:
+        for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]:
             if channel["name"] == self.name:
                 _id = channel["id"]
                 break
