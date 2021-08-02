@@ -593,12 +593,12 @@ class SlackBoltBackend(ErrBot):
         name = name.lstrip("#")
         channel = [
             channel
-            for channel in self.webclient.channels_list()
-            if channel.name == name
+            for channel in self.webclient.conversations_list()["channels"]
+            if channel["name"] == name
         ]
         if not channel:
             raise RoomDoesNotExistError(f"No channel named {name} exists")
-        return channel[0].id
+        return channel[0]["id"]
 
     def channels(self, exclude_archived=True, joined_only=False):
         """
