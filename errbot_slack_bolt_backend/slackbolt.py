@@ -34,7 +34,6 @@ from errbot.utils import split_string_after
 
 log = logging.getLogger(__name__)
 
-
 try:
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -337,6 +336,8 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 
 class SlackBoltBackend(ErrBot):
+    USERS_PAG_LIMIT = 1
+
     @staticmethod
     def _unpickle_identifier(identifier_str):
         return SlackBoltBackend.__build_identifier(identifier_str)
@@ -565,21 +566,34 @@ class SlackBoltBackend(ErrBot):
     def username_to_userid(self, name: str):
         """Convert a Slack user name to their user ID"""
         name = name.lstrip("@")
-        user = [
-            user
-            for user in self.webclient.users_list()["members"]
-            if user["name"] == name
-        ]
-        if user == []:
+        user = self.__find_user_by_name(name)
+        if not user:
             raise UserDoesNotExistError(f"Cannot find user {name}.")
-        if len(user) > 1:
-            log.error(
-                "Failed to uniquely identify '{}'.  Errbot found the following users: {}".format(
-                    name, " ".join(["{}={}".format(u["name"], u["id"]) for u in user])
-                )
-            )
+        if user and isinstance(user, list) and len(user) > 1:
             raise UserNotUniqueError(f"Failed to uniquely identify {name}.")
-        return user[0]["id"]
+        return user["id"]
+
+    def __find_user_by_name(self, name):
+        members, next_cursor = self.__index_users(limit = self.USERS_PAG_LIMIT)
+        user = self.__get_item_by_key(members, 'name', name)
+        while len(next_cursor) and user is None:
+            members, next_cursor = self.__index_users(limit = self.USERS_PAG_LIMIT, cursor = next_cursor)
+            user = self.__get_item_by_key(members, 'name', name)
+        return user
+
+    def __index_users(self, **kwargs):
+        response = self.webclient.users_list(**kwargs)
+        members = response['members']
+        next_cursor = response['response_metadata']['next_cursor']
+        return members, next_cursor
+
+    def __get_item_by_key(self, data, key, value):
+        items = [
+            item
+            for item in data
+            if item[key] == value
+        ]
+        return items[0] if len(items) > 0 else items if len(items) > 1 else None
 
     def channelid_to_channelname(self, id_: str):
         """Convert a Slack channel ID to its channel name"""
