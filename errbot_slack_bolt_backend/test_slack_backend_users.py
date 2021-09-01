@@ -1,10 +1,12 @@
+from .slackbolt import SlackBoltBackend
 from unittest.mock import MagicMock
 import pytest
 from errbot.backends.base import (
     UserDoesNotExistError,
     UserNotUniqueError,
 )
-from .test_utils import DummyUser, paginate, get_item_by_key_test
+from .test_utils import DummyChannel, DummyUser, paginate, \
+    get_item_by_key_test, get_webclient_mock_config
 
 class TestFindUserByUsername:
     user = DummyUser(1, '@Test 1')
@@ -43,7 +45,7 @@ class TestFindUserByUsernameFail:
             assert True
 
 def inject_mocks(users_pag_limit = 10000, return_zero_users = False):
-    backend = MagicMock()
+    backend = SlackBoltBackend(get_webclient_mock_config())
     backend.USERS_PAG_LIMIT = users_pag_limit
     backend.webclient = create_web_client(return_zero_users)
     backend.username_to_userid = username_to_userid
@@ -57,13 +59,6 @@ def create_web_client(return_zero_users = False):
         webclient.users_list = get_users
     return webclient
 
-def get_users(limit = 10000, cursor = None):
-    cursor = int(cursor) if cursor and len(cursor) > 0 else 0
-    users = get_mock_users()
-    users, next_cursor = paginate(users, limit, cursor)
-    result = prepare_response(users, next_cursor)
-    return result
-
 def prepare_response(users, next_cursor):
     result = dict()
     result['members'] = users
@@ -72,6 +67,13 @@ def prepare_response(users, next_cursor):
         result['response_metadata']['next_cursor'] = next_cursor
     else:
         result['response_metadata']['next_cursor'] = ""
+    return result
+
+def get_users(limit = 10000, cursor = None):
+    cursor = int(cursor) if cursor and len(cursor) > 0 else 0
+    users = get_mock_users()
+    users, next_cursor = paginate(users, limit, cursor)
+    result = prepare_response(users, next_cursor)
     return result
 
 def username_to_userid(backend, name):

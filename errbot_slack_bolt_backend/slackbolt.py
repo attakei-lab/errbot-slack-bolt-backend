@@ -87,10 +87,20 @@ def slack_markdown_converter(compact_output=False):
     md = Markdown(
         output_format="imtext", extensions=[ExtraExtension(), AnsiExtension()]
     )
-    md.preprocessors["LinkPreProcessor"] = LinkPreProcessor(md)
+    md.preprocessors.register(LinkPreProcessor(md), "LinkPreProcessor", 40)
     md.stripTopLevelTags = False
     return md
 
+
+class Utils:
+    @staticmethod
+    def get_item_by_key(data, key, value):
+        items = [
+            item
+            for item in data
+            if item[key] == value
+        ]
+        return items[0] if len(items) > 0 else items if len(items) > 1 else None
 
 class LinkPreProcessor(Preprocessor):
     """
@@ -336,7 +346,10 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 
 class SlackBoltBackend(ErrBot):
-    USERS_PAG_LIMIT = 1
+    USERS_PAGE_LIMIT = 1000
+    CHANNELS_PAGE_LIMIT = 1000
+    GROUPS_PAGE_LIMIT = 1000
+    CONVERSATIONS_PAGE_LIMIT = 1000
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -574,11 +587,11 @@ class SlackBoltBackend(ErrBot):
         return user["id"]
 
     def __find_user_by_name(self, name):
-        members, next_cursor = self.__index_users(limit = self.USERS_PAG_LIMIT)
-        user = self.__get_item_by_key(members, 'name', name)
+        members, next_cursor = self.__index_users(limit = self.USERS_PAGE_LIMIT)
+        user = Utils.get_item_by_key(members, 'name', name)
         while len(next_cursor) and user is None:
-            members, next_cursor = self.__index_users(limit = self.USERS_PAG_LIMIT, cursor = next_cursor)
-            user = self.__get_item_by_key(members, 'name', name)
+            members, next_cursor = self.__index_users(limit = self.USERS_PAGE_LIMIT, cursor = next_cursor)
+            user = Utils.get_item_by_key(members, 'name', name)
         return user
 
     def __index_users(self, **kwargs):
@@ -586,14 +599,6 @@ class SlackBoltBackend(ErrBot):
         members = response['members']
         next_cursor = response['response_metadata']['next_cursor']
         return members, next_cursor
-
-    def __get_item_by_key(self, data, key, value):
-        items = [
-            item
-            for item in data
-            if item[key] == value
-        ]
-        return items[0] if len(items) > 0 else items if len(items) > 1 else None
 
     def channelid_to_channelname(self, id_: str):
         """Convert a Slack channel ID to its channel name"""
@@ -605,14 +610,24 @@ class SlackBoltBackend(ErrBot):
     def channelname_to_channelid(self, name: str):
         """Convert a Slack channel name to its channel ID"""
         name = name.lstrip("#")
-        channel = [
-            channel
-            for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]
-            if channel["name"] == name
-        ]
+        channel = self.__find_conversation_by_name(name, types="public_channel,private_channel", limit=self.CONVERSATIONS_PAGE_LIMIT)
         if not channel:
             raise RoomDoesNotExistError(f"No channel named {name} exists")
-        return channel[0]["id"]
+        return channel["id"]
+
+    def __find_conversation_by_name(self, name, **kwargs):
+        conversations, next_cursor = self.__index_conversations(**kwargs)
+        channel = Utils.get_item_by_key(conversations, 'name', name)
+        while len(next_cursor) and channel is None:
+            conversations, next_cursor = self.__index_conversations(**kwargs)
+            channel = Utils.get_item_by_key(conversations, 'name', name)
+        return channel
+
+    def __index_conversations(self, **kwargs):
+        response = self.webclient.conversations_list(**kwargs)
+        channels = response['channels']
+        next_cursor = response['response_metadata']['next_cursor']
+        return channels, next_cursor
 
     def channels(self, exclude_archived=True, joined_only=False):
         """
@@ -629,21 +644,50 @@ class SlackBoltBackend(ErrBot):
         See also:
           * https://api.slack.com/methods/channels.list
           * https://api.slack.com/methods/groups.list
+
+        * ATTENTION: Things to consider:
+          * Both of methods above redirect to conversations.list slack api method
+            so, i think that the conversations.list returns channels and the
+            channels of a group in the new updates of slack api.
+
+          - Conversations list: https://api.slack.com/methods/conversations.list
         """
-        response = self.webclient.channels_list(exclude_archived=exclude_archived)
+        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived, limit=self.CHANNELS_PAGE_LIMIT)
+
+        return conversations # + groups
+
+    def __fetch_conversations(self, joined_only, **kwargs):
+        conversations, next_cursor = self.__index_conversations(**kwargs)
+        while len(next_cursor):
+            next_page_conversations, next_cursor = self.__index_conversations(**kwargs)
+            conversations.extend(next_page_conversations)
+        return self.__filtered_channels(conversations, joined_only)
+
+    def __filtered_channels(self, channels, joined_only):
         channels = [
             channel
-            for channel in response["channels"]
-            if channel["is_member"] or not joined_only
+            for channel in channels
+            if channel['is_member'] or not joined_only
         ]
+        return channels
+    
+    def __fetch_groups(self, **kwargs):
+        response = self.webclient.groups_list(**kwargs)
+        groups = response['groups']
+        next_cursor = response['response_metadata']['next_cursor']
+        while len(next_cursor):
+            response = self.webclient.groups_list(**kwargs)
+            groups.extend(response['groups'])
+            next_cursor = response['response_metadata']['next_cursor']
+        return self.__filtered_groups(groups)
 
-        response = self.webclient.groups_list(exclude_archived=exclude_archived)
+    def __filtered_groups(self, groups):
         # No need to filter for 'is_member' in this next call (it doesn't
         # (even exist) because leaving a group means you have to get invited
         # back again by somebody else.
-        groups = [group for group in response["groups"]]
+        groups = [group for group in groups]
+        return groups
 
-        return channels + groups
 
     @lru_cache(1024)
     def get_im_channel(self, id_):
