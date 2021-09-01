@@ -4,8 +4,7 @@ import pytest
 from errbot.backends.base import (
     RoomDoesNotExistError,
 )
-from .test_utils import DummyChannel, paginate, get_item_by_key_test, \
-    get_webclient_mock_config
+from .test_common import DummyChannel, SlackBoltBackendConfig, paginate, get_item_by_key_test
 
 class TestFindChannelByName:
     channel = DummyChannel(1, '#Test Channel 1')
@@ -53,7 +52,7 @@ class TestFetchChannels:
         assert len(channels) > 0
 
 def inject_mocks(conversations_pag_limit = 10000, return_zero_channels = False):
-    backend = SlackBoltBackend(get_webclient_mock_config())
+    backend = SlackBoltBackend(SlackBoltBackendConfig())
     backend.CONVERSATIONS_PAG_LIMIT = conversations_pag_limit
     backend.webclient = create_web_client(return_zero_channels)
     backend.channelname_to_channelid = channelname_to_channelid

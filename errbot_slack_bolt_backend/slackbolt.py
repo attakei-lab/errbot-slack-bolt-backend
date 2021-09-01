@@ -93,8 +93,12 @@ def slack_markdown_converter(compact_output=False):
 
 
 class Utils:
+    # TODO Add tests for this method
     @staticmethod
     def get_item_by_key(data, key, value):
+        # for item in data:
+        #     if item[key] == value:
+        #         return item
         items = [
             item
             for item in data
@@ -347,8 +351,6 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 1000
-    CHANNELS_PAGE_LIMIT = 1000
-    GROUPS_PAGE_LIMIT = 1000
     CONVERSATIONS_PAGE_LIMIT = 1000
 
     @staticmethod
@@ -582,11 +584,19 @@ class SlackBoltBackend(ErrBot):
         user = self.__find_user_by_name(name)
         if not user:
             raise UserDoesNotExistError(f"Cannot find user {name}.")
+        # TODO Maybe we should remove this condition
         if user and isinstance(user, list) and len(user) > 1:
             raise UserNotUniqueError(f"Failed to uniquely identify {name}.")
         return user["id"]
 
     def __find_user_by_name(self, name):
+        # while True:
+        #     members, next_cursor = self.__index_users(limit = self.USERS_PAGE_LIMIT)
+        #     user = Utils.get_item_by_key(members, 'name', name)
+        #     if user:
+        #         return user
+        #     elif len(next_cursor) == 0:
+        #         return None
         members, next_cursor = self.__index_users(limit = self.USERS_PAGE_LIMIT)
         user = Utils.get_item_by_key(members, 'name', name)
         while len(next_cursor) and user is None:
@@ -594,6 +604,7 @@ class SlackBoltBackend(ErrBot):
             user = Utils.get_item_by_key(members, 'name', name)
         return user
 
+    # TODO Change this name to something like: __get_users
     def __index_users(self, **kwargs):
         response = self.webclient.users_list(**kwargs)
         members = response['members']

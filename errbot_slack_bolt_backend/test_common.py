@@ -14,7 +14,8 @@ class SlackBoltBackendConfig:
     def __init__(self):
         self.BOT_PREFIX = 'SLACK_BOLT_BACKEND_TEST'
         self.BOT_ASYNC = True
-        self.BOT_ASYNC_POOLSIZE = 1024
+        # self.BOT_ASYNC_POOLSIZE = 1024
+        self.BOT_ASYNC_POOLSIZE = 64
         self.BOT_ALT_PREFIX_CASEINSENSITIVE = True
         self.BOT_ALT_PREFIXES = ['slack_bolt']
         self.MESSAGE_SIZE_LIMIT = 1024
@@ -41,7 +42,3 @@ def get_item_by_key_test(data, key, value):
         if item[key] == value
     ]
     return items[0] if len(items) == 1 else items if len(items) > 1 else None
-
-def get_webclient_mock_config():
-    config = SlackBoltBackendConfig()
-    return config
