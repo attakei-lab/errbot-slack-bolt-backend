@@ -6,9 +6,10 @@ class DummyUser:
         self.name = name
 
 class DummyChannel:
-    def __init__(self, id, name):
+    def __init__(self, id, name, is_member):
         self.id = id
         self.name = name
+        self.is_member = is_member
 
 class SlackBoltBackendConfig:
     def __init__(self):
@@ -26,14 +27,14 @@ class SlackBoltBackendConfig:
 
 def paginate(data, limit, cursor = 0):
     if cursor == 0:
-        data = data[:limit]
+        page_data = data[:limit]
         next_cursor = limit
     else:
-        data = data[cursor:(limit + cursor)]
+        page_data = data[cursor:(limit + cursor)]
         next_cursor = cursor + limit
         if next_cursor > len(data):
             next_cursor = ""
-    return data, str(next_cursor)
+    return page_data, str(next_cursor)
 
 def get_item_by_key_test(data, key, value):
     items = [

@@ -96,15 +96,9 @@ class Utils:
     # TODO Add tests for this method
     @staticmethod
     def get_item_by_key(data, key, value):
-        # for item in data:
-        #     if item[key] == value:
-        #         return item
-        items = [
-            item
-            for item in data
-            if item[key] == value
-        ]
-        return items[0] if len(items) > 0 else items if len(items) > 1 else None
+        for item in data:
+            if item[key] == value:
+                return item
 
 class LinkPreProcessor(Preprocessor):
     """
@@ -630,7 +624,7 @@ class SlackBoltBackend(ErrBot):
         conversations, next_cursor = self.__index_conversations(**kwargs)
         channel = Utils.get_item_by_key(conversations, 'name', name)
         while len(next_cursor) and channel is None:
-            conversations, next_cursor = self.__index_conversations(**kwargs)
+            conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
             channel = Utils.get_item_by_key(conversations, 'name', name)
         return channel
 
@@ -663,14 +657,14 @@ class SlackBoltBackend(ErrBot):
 
           - Conversations list: https://api.slack.com/methods/conversations.list
         """
-        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived, limit=self.CHANNELS_PAGE_LIMIT)
+        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived, limit=self.CONVERSATIONS_PAGE_LIMIT)
 
         return conversations # + groups
 
     def __fetch_conversations(self, joined_only, **kwargs):
         conversations, next_cursor = self.__index_conversations(**kwargs)
         while len(next_cursor):
-            next_page_conversations, next_cursor = self.__index_conversations(**kwargs)
+            next_page_conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
             conversations.extend(next_page_conversations)
         return self.__filtered_channels(conversations, joined_only)
 
@@ -681,24 +675,6 @@ class SlackBoltBackend(ErrBot):
             if channel['is_member'] or not joined_only
         ]
         return channels
-    
-    def __fetch_groups(self, **kwargs):
-        response = self.webclient.groups_list(**kwargs)
-        groups = response['groups']
-        next_cursor = response['response_metadata']['next_cursor']
-        while len(next_cursor):
-            response = self.webclient.groups_list(**kwargs)
-            groups.extend(response['groups'])
-            next_cursor = response['response_metadata']['next_cursor']
-        return self.__filtered_groups(groups)
-
-    def __filtered_groups(self, groups):
-        # No need to filter for 'is_member' in this next call (it doesn't
-        # (even exist) because leaving a group means you have to get invited
-        # back again by somebody else.
-        groups = [group for group in groups]
-        return groups
-
 
     @lru_cache(1024)
     def get_im_channel(self, id_):
