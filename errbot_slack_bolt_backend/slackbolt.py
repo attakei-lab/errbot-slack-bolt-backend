@@ -344,7 +344,7 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 1000
-    CONVERSATIONS_PAGE_LIMIT = 1000
+    CONVERSATIONS_PAGE_LIMIT = 10
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -611,12 +611,14 @@ class SlackBoltBackend(ErrBot):
         return channel["id"]
 
     def __find_conversation_by_name(self, name, **kwargs):
-        conversations, next_cursor = self.__index_conversations(**kwargs)
-        channel = Utils.get_item_by_key(conversations, 'name', name)
-        while len(next_cursor) and channel is None:
+        next_cursor = None
+        while True:
             conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
             channel = Utils.get_item_by_key(conversations, 'name', name)
-        return channel
+            if channel:
+                return channel
+            elif len(next_cursor) == 0:
+                return None
 
     def __index_conversations(self, **kwargs):
         response = self.webclient.conversations_list(**kwargs)
@@ -647,15 +649,19 @@ class SlackBoltBackend(ErrBot):
 
           - Conversations list: https://api.slack.com/methods/conversations.list
         """
+        # TODO: consider remove "exclude_archived"
         conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived, limit=self.CONVERSATIONS_PAGE_LIMIT)
 
         return conversations # + groups
 
     def __fetch_conversations(self, joined_only, **kwargs):
-        conversations, next_cursor = self.__index_conversations(**kwargs)
-        while len(next_cursor):
-            next_page_conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
-            conversations.extend(next_page_conversations)
+        next_cursor = None
+        conversations = []
+        while True:
+            page_conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
+            conversations.extend(page_conversations)
+            if len(next_cursor) == 0:
+                break
         return self.__filtered_channels(conversations, joined_only)
 
     def __filtered_channels(self, channels, joined_only):
@@ -1174,7 +1180,7 @@ class SlackRoom(Room):
         else:
             self._name = bot.channelid_to_channelname(channelid)
 
-        self._id = None
+        self._id = channelid
         self._bot = bot
         self.webclient = webclient
 
@@ -1190,12 +1196,8 @@ class SlackRoom(Room):
         """
         The channel object exposed by SlackClient
         """
-        _id = None
-        for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]:
-            if channel["name"] == self.name:
-                _id = channel["id"]
-                break
-        else:
+        _id = self._bot.channelname_to_channelid(self.name)
+        if not _id:
             raise RoomDoesNotExistError(
                 f"{str(self)} does not exist (or is a private group you don't have access to)"
             )

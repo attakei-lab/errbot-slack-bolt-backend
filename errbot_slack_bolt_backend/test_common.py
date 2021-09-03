@@ -24,22 +24,3 @@ class SlackBoltBackendConfig:
             'bot_token': os.environ.get('SLACK_BOT_TOKEN'),
             'app_token': os.environ.get('SLACK_APP_TOKEN')
         }
-
-def paginate(data, limit, cursor = 0):
-    if cursor == 0:
-        page_data = data[:limit]
-        next_cursor = limit
-    else:
-        page_data = data[cursor:(limit + cursor)]
-        next_cursor = cursor + limit
-        if next_cursor > len(data):
-            next_cursor = ""
-    return page_data, str(next_cursor)
-
-def get_item_by_key_test(data, key, value):
-    items = [
-        item
-        for item in data
-        if item[key] == value
-    ]
-    return items[0] if len(items) == 1 else items if len(items) > 1 else None
