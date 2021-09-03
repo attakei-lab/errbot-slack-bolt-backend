@@ -13,8 +13,8 @@ class Test_get_item_by_key:
     def mocked_utils(self):
         return Utils()
     
-    def test_find_by_name(self, mocked_utils):
+    def test_returns_item_when_name_exists(self, mocked_utils):
         assert mocked_utils.get_item_by_key(self.users_list, 'name', 'Test 2') is not None
     
-    def test_find_by_id(self, mocked_utils):
-        assert mocked_utils.get_item_by_key(self.users_list, 'id', 2) is not None
+    def test_returns_none_when_id_does_not_exist(self, mocked_utils):
+        assert mocked_utils.get_item_by_key(self.users_list, 'id', 99) is None

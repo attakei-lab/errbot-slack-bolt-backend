@@ -33,14 +33,9 @@ class Test_with_pagination:
         assert mocked_backend.webclient.users_list.call_args_list[0] == call(limit=1, cursor=None)
         assert mocked_backend.webclient.users_list.call_args_list[1] == call(limit=1, cursor="1")
 
-    def test_fail_when_user_does_not_exist(self, mocked_backend):
+    def test_fails_when_user_does_not_exist(self, mocked_backend):
         user = DummyUser(99, '@Test 99') # user not in the list
-        mocked_backend.webclient.users_list = MagicMock(return_value = {
-            'members': [],
-            'response_metadata': {
-                'next_cursor': ''
-            }
-        })
+        mocked_backend.webclient.users_list = MagicMock(return_value = prepare_response([], ""))
         with pytest.raises(UserDoesNotExistError):
             mocked_backend.username_to_userid(user.name)
 
@@ -56,11 +51,12 @@ def create_web_client():
     return webclient
 
 def prepare_response(users, next_cursor):
-    result = dict()
-    result['members'] = users
-    result['response_metadata'] = dict()
-    result['response_metadata']['next_cursor'] = next_cursor
-    return result
+    return {
+        'members': users,
+        'response_metadata': {
+            'next_cursor': next_cursor
+        }
+    }
 
 def get_users_list(**kwargs):
     if not kwargs['cursor']:

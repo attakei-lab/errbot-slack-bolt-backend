@@ -343,8 +343,8 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 
 class SlackBoltBackend(ErrBot):
-    USERS_PAGE_LIMIT = 1000
-    CONVERSATIONS_PAGE_LIMIT = 10
+    USERS_PAGE_LIMIT = 500
+    CONVERSATIONS_PAGE_LIMIT = 50
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
