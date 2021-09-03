@@ -34,7 +34,6 @@ from errbot.utils import split_string_after
 
 log = logging.getLogger(__name__)
 
-
 try:
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -88,10 +87,17 @@ def slack_markdown_converter(compact_output=False):
     md = Markdown(
         output_format="imtext", extensions=[ExtraExtension(), AnsiExtension()]
     )
-    md.preprocessors["LinkPreProcessor"] = LinkPreProcessor(md)
+    md.preprocessors.register(LinkPreProcessor(md), "LinkPreProcessor", 40)
     md.stripTopLevelTags = False
     return md
 
+
+class Utils:
+    @staticmethod
+    def get_item_by_key(data, key, value):
+        for item in data:
+            if item[key] == value:
+                return item
 
 class LinkPreProcessor(Preprocessor):
     """
@@ -337,6 +343,9 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 
 class SlackBoltBackend(ErrBot):
+    USERS_PAGE_LIMIT = 500
+    CONVERSATIONS_PAGE_LIMIT = 50
+
     @staticmethod
     def _unpickle_identifier(identifier_str):
         return SlackBoltBackend.__build_identifier(identifier_str)
@@ -565,21 +574,26 @@ class SlackBoltBackend(ErrBot):
     def username_to_userid(self, name: str):
         """Convert a Slack user name to their user ID"""
         name = name.lstrip("@")
-        user = [
-            user
-            for user in self.webclient.users_list()["members"]
-            if user["name"] == name
-        ]
-        if user == []:
+        user = self.__find_user_by_name(name)
+        if not user:
             raise UserDoesNotExistError(f"Cannot find user {name}.")
-        if len(user) > 1:
-            log.error(
-                "Failed to uniquely identify '{}'.  Errbot found the following users: {}".format(
-                    name, " ".join(["{}={}".format(u["name"], u["id"]) for u in user])
-                )
-            )
-            raise UserNotUniqueError(f"Failed to uniquely identify {name}.")
-        return user[0]["id"]
+        return user["id"]
+
+    def __find_user_by_name(self, name):
+        next_cursor = None
+        while True:
+            members, next_cursor = self.__get_users(limit = self.USERS_PAGE_LIMIT, cursor = next_cursor)
+            user = Utils.get_item_by_key(members, 'name', name)
+            if user:
+                return user
+            elif len(next_cursor) == 0:
+                return None
+
+    def __get_users(self, **kwargs):
+        response = self.webclient.users_list(**kwargs)
+        members = response['members']
+        next_cursor = response['response_metadata']['next_cursor']
+        return members, next_cursor
 
     def channelid_to_channelname(self, id_: str):
         """Convert a Slack channel ID to its channel name"""
@@ -591,14 +605,26 @@ class SlackBoltBackend(ErrBot):
     def channelname_to_channelid(self, name: str):
         """Convert a Slack channel name to its channel ID"""
         name = name.lstrip("#")
-        channel = [
-            channel
-            for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]
-            if channel["name"] == name
-        ]
+        channel = self.__find_conversation_by_name(name, types="public_channel,private_channel", limit=self.CONVERSATIONS_PAGE_LIMIT)
         if not channel:
             raise RoomDoesNotExistError(f"No channel named {name} exists")
-        return channel[0]["id"]
+        return channel["id"]
+
+    def __find_conversation_by_name(self, name, **kwargs):
+        next_cursor = None
+        while True:
+            conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
+            channel = Utils.get_item_by_key(conversations, 'name', name)
+            if channel:
+                return channel
+            elif len(next_cursor) == 0:
+                return None
+
+    def __index_conversations(self, **kwargs):
+        response = self.webclient.conversations_list(**kwargs)
+        channels = response['channels']
+        next_cursor = response['response_metadata']['next_cursor']
+        return channels, next_cursor
 
     def channels(self, exclude_archived=True, joined_only=False):
         """
@@ -615,21 +641,36 @@ class SlackBoltBackend(ErrBot):
         See also:
           * https://api.slack.com/methods/channels.list
           * https://api.slack.com/methods/groups.list
+
+        * ATTENTION: Things to consider:
+          * Both of methods above redirect to conversations.list slack api method
+            so, i think that the conversations.list returns channels and the
+            channels of a group in the new updates of slack api.
+
+          - Conversations list: https://api.slack.com/methods/conversations.list
         """
-        response = self.webclient.channels_list(exclude_archived=exclude_archived)
+        # TODO: consider remove "exclude_archived"
+        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived, limit=self.CONVERSATIONS_PAGE_LIMIT)
+
+        return conversations # + groups
+
+    def __fetch_conversations(self, joined_only, **kwargs):
+        next_cursor = None
+        conversations = []
+        while True:
+            page_conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
+            conversations.extend(page_conversations)
+            if len(next_cursor) == 0:
+                break
+        return self.__filtered_channels(conversations, joined_only)
+
+    def __filtered_channels(self, channels, joined_only):
         channels = [
             channel
-            for channel in response["channels"]
-            if channel["is_member"] or not joined_only
+            for channel in channels
+            if channel['is_member'] or not joined_only
         ]
-
-        response = self.webclient.groups_list(exclude_archived=exclude_archived)
-        # No need to filter for 'is_member' in this next call (it doesn't
-        # (even exist) because leaving a group means you have to get invited
-        # back again by somebody else.
-        groups = [group for group in response["groups"]]
-
-        return channels + groups
+        return channels
 
     @lru_cache(1024)
     def get_im_channel(self, id_):
@@ -1139,7 +1180,7 @@ class SlackRoom(Room):
         else:
             self._name = bot.channelid_to_channelname(channelid)
 
-        self._id = None
+        self._id = channelid
         self._bot = bot
         self.webclient = webclient
 
@@ -1155,12 +1196,8 @@ class SlackRoom(Room):
         """
         The channel object exposed by SlackClient
         """
-        _id = None
-        for channel in self.webclient.conversations_list(types="public_channel,private_channel")["channels"]:
-            if channel["name"] == self.name:
-                _id = channel["id"]
-                break
-        else:
+        _id = self._bot.channelname_to_channelid(self.name)
+        if not _id:
             raise RoomDoesNotExistError(
                 f"{str(self)} does not exist (or is a private group you don't have access to)"
             )

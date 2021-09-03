@@ -1,0 +1,2 @@
+errbot==6.1.8
+slack-bolt==1.9.0
