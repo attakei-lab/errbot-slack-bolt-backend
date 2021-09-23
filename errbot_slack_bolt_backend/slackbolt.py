@@ -626,6 +626,10 @@ class SlackBoltBackend(ErrBot):
         next_cursor = response['response_metadata']['next_cursor']
         return channels, next_cursor
 
+    def find_user_profile(self, user):
+        response = self.webclient.users_profile_get(user=user, include_labels=True)
+        return response['profile']
+
     def channels(self, exclude_archived=True, joined_only=False):
         """
         Get all channels and groups and return information about them.
