@@ -35,10 +35,7 @@ def create_web_client():
     webclient.users_profile_get = MagicMock(side_effect = get_user_profile_response)
     return webclient
 
-def user_profile_get():
-    return
-
-def get_user_profile_response(user, include_labels):
+def get_user_profile_response(user, _):
     response = dict()
     response['ok'] = True
     if user == userid:
