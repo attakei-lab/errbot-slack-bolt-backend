@@ -344,7 +344,7 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 500
-    CONVERSATIONS_PAGE_LIMIT = 50
+    CONVERSATIONS_PAGE_LIMIT = 500
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -621,7 +621,12 @@ class SlackBoltBackend(ErrBot):
                 return None
 
     def __index_conversations(self, **kwargs):
-        response = self.webclient.conversations_list(**kwargs)
+        try:
+            response = self.webclient.conversations_list(**kwargs)
+        except Exception as e:
+            if e.__dict__.get('response').get('error') == 'ratelimited':
+                raise Exception("Too many requests were made. Please, retry after 1 minute.")
+            raise Exception(e) from e
         channels = response['channels']
         next_cursor = response['response_metadata']['next_cursor']
         return channels, next_cursor

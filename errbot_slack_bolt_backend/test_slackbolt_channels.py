@@ -44,6 +44,12 @@ class Test_with_pagination:
         mocked_backend.webclient.users_list = MagicMock(return_value = prepare_response([], ""))
         with pytest.raises(RoomDoesNotExistError):
             mocked_backend.channelname_to_channelid(nonexistent_channel.name)
+    
+    def test_fail_when_rate_limited_error_raises(self, mocked_backend):
+        mocked_backend.webclient.conversations_list = MagicMock(side_effect = rate_limited_exception())
+        with pytest.raises(Exception):
+            mocked_backend.channelname_to_channelid(self.channel.name)
+
 
 def inject_mocks():
     backend = SlackBoltBackend(SlackBoltBackendConfig())
@@ -69,3 +75,14 @@ def conversations_list(**kwargs):
         return prepare_response([DummyChannel(1, 'Test Channel 1', True).__dict__], "1")
     else:
         return prepare_response([DummyChannel(2, 'Test Channel 2', True).__dict__], "")
+
+
+def rate_limited_exception():
+    e = Exception()
+    e.__dict__ = {
+        'response': {
+            'ok': False,
+            'error': 'ratelimited'
+        }
+    }
+    return e
