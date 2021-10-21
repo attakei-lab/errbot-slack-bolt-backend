@@ -345,7 +345,8 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 500
-    CONVERSATIONS_PAGE_LIMIT = 500
+    CONVERSATIONS_PAGE_LIMIT = 1
+    PAGINATION_RETRY_LIMIT = 3
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -623,15 +624,17 @@ class SlackBoltBackend(ErrBot):
 
     # pylint: disable=invalid-name
     def __index_conversations(self, **kwargs):
-        # TODO Improve implementation
-        # 1. Use the Retry-After header for making the next automatic retrial
-        # 2. Only retry X times (default: 3) - use a constant
-        try:
-            response = self.webclient.conversations_list(**kwargs)
-        except SlackApiError as e:
-            if e.response['error'] == 'ratelimited':
-                raise Exception("Too many requests were made. Please, try again in 1 minute. " + str(e.response.__dict__)) from e
-            raise e
+        for i in range(self.PAGINATION_RETRY_LIMIT):
+            try:
+                response = self.webclient.conversations_list(**kwargs)
+            except SlackApiError as e:
+                if e.response['error'] == 'ratelimited':
+                    if i == self.PAGINATION_RETRY_LIMIT - 1:
+                        raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
+                    retry_after = e.response.__dict__['headers']['retry-after']
+                    sleep(int(retry_after))
+                    continue
+                raise e
         channels = response['channels']
         next_cursor = response['response_metadata']['next_cursor']
         return channels, next_cursor
