@@ -627,6 +627,7 @@ class SlackBoltBackend(ErrBot):
         for i in range(self.PAGINATION_RETRY_LIMIT):
             try:
                 response = self.webclient.conversations_list(**kwargs)
+                break
             except SlackApiError as e:
                 if e.response['error'] == 'ratelimited':
                     if i == self.PAGINATION_RETRY_LIMIT - 1:
