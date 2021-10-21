@@ -38,6 +38,7 @@ try:
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
     from slack_sdk.web import WebClient
+    from slack_sdk.errors import SlackApiError
 except ImportError:
     log.exception("Could not start the SlackBolt backend")
     log.fatal(
@@ -620,13 +621,17 @@ class SlackBoltBackend(ErrBot):
             elif len(next_cursor) == 0:
                 return None
 
+    # pylint: disable=invalid-name
     def __index_conversations(self, **kwargs):
+        # TODO Improve implementation
+        # 1. Use the Retry-After header for making the next automatic retrial
+        # 2. Only retry X times (default: 3) - use a constant
         try:
             response = self.webclient.conversations_list(**kwargs)
-        except Exception as e:
-            if e.__dict__.get('response').get('error') == 'ratelimited':
-                raise Exception("Too many requests were made. Please, retry after 1 minute.")
-            raise Exception(e) from e
+        except SlackApiError as e:
+            if e.response['error'] == 'ratelimited':
+                raise Exception("Too many requests were made. Please, try again in 1 minute. " + str(e.response.__dict__)) from e
+            raise e
         channels = response['channels']
         next_cursor = response['response_metadata']['next_cursor']
         return channels, next_cursor
