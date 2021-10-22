@@ -4,8 +4,8 @@ import logging
 import pprint
 import re
 import sys
+import time
 from functools import lru_cache
-from time import sleep
 from typing import BinaryIO
 
 from markdown import Markdown
@@ -38,6 +38,7 @@ try:
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
     from slack_sdk.web import WebClient
+    from slack_sdk.errors import SlackApiError
 except ImportError:
     log.exception("Could not start the SlackBolt backend")
     log.fatal(
@@ -344,7 +345,8 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 500
-    CONVERSATIONS_PAGE_LIMIT = 50
+    CONVERSATIONS_PAGE_LIMIT = 500
+    PAGINATION_RETRY_LIMIT = 3
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -620,8 +622,22 @@ class SlackBoltBackend(ErrBot):
             elif len(next_cursor) == 0:
                 return None
 
+    # pylint: disable=invalid-name
     def __index_conversations(self, **kwargs):
-        response = self.webclient.conversations_list(**kwargs)
+        for i in range(self.PAGINATION_RETRY_LIMIT):
+            try:
+                response = self.webclient.conversations_list(**kwargs)
+                break
+            except SlackApiError as e:
+                if e.response['error'] == 'ratelimited':
+                    if i == self.PAGINATION_RETRY_LIMIT - 1:
+                        # see: https://api.slack.com/docs/rate-limits#tier_t2
+                        raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
+                    retry_after = e.response.headers['retry-after']
+                    log.info(f"Retrying for {i+1}-th time. Sleeping {retry_after} seconds")
+                    time.sleep(int(retry_after))
+                    continue
+                raise e
         channels = response['channels']
         next_cursor = response['response_metadata']['next_cursor']
         return channels, next_cursor
