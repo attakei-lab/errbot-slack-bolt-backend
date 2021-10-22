@@ -345,7 +345,7 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 500
-    CONVERSATIONS_PAGE_LIMIT = 1
+    CONVERSATIONS_PAGE_LIMIT = 500
     PAGINATION_RETRY_LIMIT = 3
 
     @staticmethod
