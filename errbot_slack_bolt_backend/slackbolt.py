@@ -4,8 +4,8 @@ import logging
 import pprint
 import re
 import sys
+import time
 from functools import lru_cache
-from time import sleep
 from typing import BinaryIO
 
 from markdown import Markdown
@@ -631,9 +631,11 @@ class SlackBoltBackend(ErrBot):
             except SlackApiError as e:
                 if e.response['error'] == 'ratelimited':
                     if i == self.PAGINATION_RETRY_LIMIT - 1:
+                        # see: https://api.slack.com/docs/rate-limits#tier_t2
                         raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
-                    retry_after = e.response.__dict__['headers']['retry-after']
-                    sleep(int(retry_after))
+                    retry_after = e.response.headers['retry-after']
+                    log.info(f"Retrying for {i+1}-th time. Sleeping {retry_after} seconds")
+                    time.sleep(int(retry_after))
                     continue
                 raise e
         channels = response['channels']

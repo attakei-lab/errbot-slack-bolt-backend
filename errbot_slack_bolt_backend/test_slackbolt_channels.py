@@ -1,5 +1,5 @@
 from .slackbolt import SlackBoltBackend
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 import pytest
 from errbot.backends.base import (
     RoomDoesNotExistError,
@@ -49,17 +49,17 @@ class Test_with_pagination:
             mocked_backend.channelname_to_channelid(nonexistent_channel.name)
 
     def test_fail_when_rate_limited_error_raises_with_retry_after(self, mocked_backend):
-        mocked_backend.PAGINATION_RETRY_LIMIT = 3
         mocked_backend.webclient.conversations_list = MagicMock(side_effect = get_slack_response_error())
         with pytest.raises(Exception):
-            mocked_backend.channelname_to_channelid(self.channel.name)
-        
-        assert mocked_backend.webclient.conversations_list.call_count == 3
+            mocked_backend.channelname_to_channelid(self.channel.name)        
+        assert mocked_backend.webclient.conversations_list.call_count == mocked_backend.PAGINATION_RETRY_LIMIT
     
     def test_success_when_rate_limited_error_raises_with_retry_after(self, mocked_backend):
-        mocked_backend.webclient.conversations_list = MagicMock(side_effect = [get_slack_response_error(), conversations_list(cursor='1')])
-        mocked_backend.channelname_to_channelid(self.channel.name)
-        assert mocked_backend.webclient.conversations_list.call_count == 2
+        with patch('time.sleep') as sleep_mock:
+            mocked_backend.webclient.conversations_list = MagicMock(side_effect = [get_slack_response_error(), conversations_list(cursor='1')])
+            mocked_backend.channelname_to_channelid(self.channel.name)
+            assert mocked_backend.webclient.conversations_list.call_count == 2
+            sleep_mock.assert_called_once_with(0)
 
 def inject_mocks():
     backend = SlackBoltBackend(SlackBoltBackendConfig())
