@@ -26,11 +26,11 @@ from errbot.backends.base import (
     RoomOccupant,
     Stream,
     UserDoesNotExistError,
-    UserNotUniqueError,
 )
 from errbot.core import ErrBot
 from errbot.rendering.ansiext import IMTEXT_CHRS, AnsiExtension, enable_format
 from errbot.utils import split_string_after
+from memoization import cached
 
 log = logging.getLogger(__name__)
 
@@ -347,6 +347,7 @@ class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 500
     CONVERSATIONS_PAGE_LIMIT = 500
     PAGINATION_RETRY_LIMIT = 3
+    DEFAULT_CACHE_TTL = 4 * 60 * 60  # 4 hours
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -582,14 +583,33 @@ class SlackBoltBackend(ErrBot):
         return user["id"]
 
     def __find_user_by_name(self, name):
+        users = self.__get_reachable_users()
+        return Utils.get_item_by_key(users, 'name', name)
+    
+    @cached(ttl=DEFAULT_CACHE_TTL)
+    def __get_reachable_users(self):
         next_cursor = None
-        while True:
-            members, next_cursor = self.__get_users(limit = self.USERS_PAGE_LIMIT, cursor = next_cursor)
-            user = Utils.get_item_by_key(members, 'name', name)
-            if user:
-                return user
-            elif len(next_cursor) == 0:
-                return None
+        users = []
+        for i in range(self.PAGINATION_RETRY_LIMIT):
+            try:
+                while True:
+                    data, next_cursor = self.__get_users(limit=self.USERS_PAGE_LIMIT, cursor=next_cursor)
+                    users.extend(data)
+                    if not next_cursor:
+                        break
+            except SlackApiError as e:
+                if e.response['error'] == 'ratelimited':
+                    if i == self.PAGINATION_RETRY_LIMIT - 1:
+                        # see: https://api.slack.com/docs/rate-limits#tier_t2
+                        raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
+                    retry_after = e.response.headers['retry-after']
+                    log.info(f"Retrying for {i + 1}-th time. Sleeping {retry_after} seconds")
+                    time.sleep(int(retry_after))
+                    continue
+                raise e
+            if not next_cursor:
+                break
+        return users
 
     def __get_users(self, **kwargs):
         response = self.webclient.users_list(**kwargs)
