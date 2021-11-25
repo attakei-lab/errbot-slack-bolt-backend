@@ -1,13 +1,9 @@
 from .slackbolt import SlackBoltBackend
 from unittest.mock import MagicMock, call, patch
 import pytest
-from errbot.backends.base import (
-    RoomDoesNotExistError,
-)
-from slack_sdk.errors import SlackApiError
-from slack_sdk.web.slack_response import SlackResponse
-
-from .test_common import DummyChannel, SlackBoltBackendConfig
+from errbot.backends.base import RoomDoesNotExistError
+from .test_common import DummyChannel, SlackBoltBackendConfig, \
+    get_rate_limited_slack_response_error
 
 class Test_without_pagination:
     channel = DummyChannel(1, '#Test Channel 1', True)
@@ -49,14 +45,14 @@ class Test_with_pagination:
             mocked_backend.channelname_to_channelid(nonexistent_channel.name)
 
     def test_fail_when_rate_limited_error_raises_with_retry_after(self, mocked_backend):
-        mocked_backend.webclient.conversations_list = MagicMock(side_effect = get_slack_response_error())
+        mocked_backend.webclient.conversations_list = MagicMock(side_effect = get_rate_limited_slack_response_error())
         with pytest.raises(Exception):
             mocked_backend.channelname_to_channelid(self.channel.name)        
         assert mocked_backend.webclient.conversations_list.call_count == mocked_backend.PAGINATION_RETRY_LIMIT
     
     def test_success_when_rate_limited_error_raises_with_retry_after(self, mocked_backend):
         with patch('time.sleep') as sleep_mock:
-            mocked_backend.webclient.conversations_list = MagicMock(side_effect = [get_slack_response_error(), conversations_list(cursor='1')])
+            mocked_backend.webclient.conversations_list = MagicMock(side_effect = [get_rate_limited_slack_response_error(), conversations_list(cursor='1')])
             mocked_backend.channelname_to_channelid(self.channel.name)
             assert mocked_backend.webclient.conversations_list.call_count == 2
             sleep_mock.assert_called_once_with(0)
@@ -86,13 +82,3 @@ def conversations_list(**kwargs):
     else:
         return prepare_response([DummyChannel(2, 'Test Channel 2', True).__dict__], "")
 
-def get_slack_response_error():
-    return SlackApiError('ratelimited', SlackResponse(
-        data={'ok': False,'error': 'ratelimited'},
-        client=None,
-        headers={'retry-after': '0'},
-        req_args=None,
-        api_url="",
-        http_verb="",
-        status_code=400
-    ))

@@ -582,9 +582,13 @@ class SlackBoltBackend(ErrBot):
             raise UserDoesNotExistError(f"Cannot find user {name}.")
         return user["id"]
 
-    def __find_user_by_name(self, name):
+    def __find_user_by_name(self, name, can_refresh_cache=True):
         users = self.__get_reachable_users()
-        return Utils.get_item_by_key(users, 'name', name)
+        user = Utils.get_item_by_key(users, 'name', name)
+        if not user and can_refresh_cache:
+            self.clear_users_cache()
+            return self.__find_user_by_name(name, can_refresh_cache=False)
+        return user
     
     @cached(ttl=DEFAULT_CACHE_TTL)
     def __get_reachable_users(self):
@@ -610,6 +614,9 @@ class SlackBoltBackend(ErrBot):
             if not next_cursor:
                 break
         return users
+
+    def clear_users_cache(self):
+        self.__get_reachable_users.cache_clear()
 
     def __get_users(self, **kwargs):
         response = self.webclient.users_list(**kwargs)
