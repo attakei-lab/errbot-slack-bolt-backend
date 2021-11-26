@@ -640,14 +640,40 @@ class SlackBoltBackend(ErrBot):
         return channel["id"]
 
     def __find_conversation_by_name(self, name, **kwargs):
+        conversations = self.__get_reachable_conversations(**kwargs)
+        channel = Utils.get_item_by_key(conversations, 'name', name)
+        if not channel and kwargs.get('can_refresh_cache'):
+            self.clear_conversations_cache()
+            return self.__find_conversation_by_name(name, can_refresh_cache=False, **kwargs)
+        return channel
+
+    @cached(ttl=DEFAULT_CACHE_TTL)
+    def __get_reachable_conversations(self, **kwargs):
         next_cursor = None
-        while True:
-            conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
-            channel = Utils.get_item_by_key(conversations, 'name', name)
-            if channel:
-                return channel
-            elif len(next_cursor) == 0:
-                return None
+        conversations = []
+        for i in range(self.PAGINATION_RETRY_LIMIT):
+            try:
+                while True:
+                    data, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
+                    conversations.extend(data)
+                    if not next_cursor:
+                        break
+            except SlackApiError as e:
+                if e.response['error'] == 'ratelimited':
+                    if i == self.PAGINATION_RETRY_LIMIT - 1:
+                        # see: https://api.slack.com/docs/rate-limits#tier_t2
+                        raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
+                    retry_after = e.response.headers['retry-after']
+                    log.info(f"Retrying for {i + 1}-th time. Sleeping {retry_after} seconds")
+                    time.sleep(int(retry_after))
+                    continue
+                raise e
+            if not next_cursor:
+                break
+        return conversations
+
+    def clear_conversations_cache(self):
+        self.__get_reachable_conversations.cache_clear()
 
     # pylint: disable=invalid-name
     def __index_conversations(self, **kwargs):
