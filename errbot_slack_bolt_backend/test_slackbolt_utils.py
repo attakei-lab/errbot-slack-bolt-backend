@@ -21,18 +21,17 @@ class Test_get_item_by_key:
     def test_returns_none_when_id_does_not_exist(self, mocked_utils):
         assert mocked_utils.get_item_by_key(self.users_list, 'id', 99) is None
 
-class Test_paginate_safely:
+class Test_get_items:
     @pytest.fixture
     def mocked_utils(self):
         return Utils()
     
     def test_success_when_return_all_data(self, mocked_utils):
-        data = mocked_utils.paginate_safely(get_users_page)
+        data = mocked_utils.get_items(get_users_page)
         assert len(data)
 
     def test_success_with_rate_limited_error(self, mocked_utils):
-        # mocked_utils.paginate_safely = 
-        data = mocked_utils.paginate_safely(MagicMock(side_effect=[
+        data = mocked_utils.get_items(MagicMock(side_effect=[
             get_rate_limited_slack_response_error(),
             get_users_page(),
             get_users_page(cursor='1'),
@@ -42,7 +41,7 @@ class Test_paginate_safely:
 
     def test_fail_with_rate_limited_error(self, mocked_utils):
         with pytest.raises(Exception):
-            mocked_utils.paginate_safely(MagicMock(side_effect=get_rate_limited_slack_response_error()))
+            mocked_utils.get_items(MagicMock(side_effect=get_rate_limited_slack_response_error()))
 
 def get_users_page(cursor=None, **kwargs):
     if cursor == None:

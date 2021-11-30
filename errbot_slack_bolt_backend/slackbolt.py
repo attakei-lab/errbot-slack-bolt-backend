@@ -104,28 +104,29 @@ class Utils:
         return None
 
     @staticmethod
-    def get_items(fetch_page_fn, fn_kwargs={}):
+    def get_items(fetch_page_fn, kwargs={}):
         """
         Get items page by page using the fetch page function
         """
         data = []
         next_cursor = None
         i = 0
-        while i < Utils.PAGINATION_RETRY_LIMIT:
+        while i <= Utils.PAGINATION_RETRY_LIMIT:
             try:
                 while True:
-                    partial_data, next_cursor = fetch_page_fn(cursor=next_cursor, **fn_kwargs)
+                    partial_data, next_cursor = fetch_page_fn(cursor=next_cursor, **kwargs)
                     i = 0
                     data += partial_data
                     if not next_cursor:
                         break
             except SlackApiError as e:
                 if e.response['error'] == 'ratelimited':
-                    if i == Utils.PAGINATION_RETRY_LIMIT - 1:
+                    if i == Utils.PAGINATION_RETRY_LIMIT:
                         # see: https://api.slack.com/docs/rate-limits#tier_t2
                         raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
+                    i += 1
                     retry_after = e.response.headers['retry-after']
-                    log.info(f"Retrying for {i + 1}-th time. Sleeping {retry_after} seconds")
+                    log.info(f"Retrying for {i}-th time. Sleeping {retry_after} seconds")
                     time.sleep(int(retry_after))
                     continue
                 raise e
@@ -663,7 +664,7 @@ class SlackBoltBackend(ErrBot):
 
     @cached(ttl=CACHE_TTL_SECONDS)
     def __get_conversations(self, **kwargs):
-        conversations = Utils.get_items(self.__get_conversations_page, fn_kwargs=kwargs)
+        conversations = Utils.get_items(self.__get_conversations_page, kwargs=kwargs)
         log.debug(f"{len(conversations)} conversations cached")
         return conversations
 

@@ -1,4 +1,4 @@
-from .slackbolt import SlackBoltBackend
+from .slackbolt import SlackBoltBackend, Utils
 from unittest.mock import MagicMock, call, patch
 import pytest
 from errbot.backends.base import RoomDoesNotExistError
@@ -49,7 +49,7 @@ class Test_channelname_to_channelid:
         mocked_backend.webclient.conversations_list = MagicMock(side_effect = get_rate_limited_slack_response_error())
         with pytest.raises(Exception):
             mocked_backend.channelname_to_channelid(self.channel.name)        
-        assert mocked_backend.webclient.conversations_list.call_count == mocked_backend.PAGINATION_RETRY_LIMIT
+        assert mocked_backend.webclient.conversations_list.call_count == Utils.PAGINATION_RETRY_LIMIT + 1
     
     def test_success_when_rate_limited_error_raises_with_retry_after(self, mocked_backend):
         mocked_backend.clear_conversations_cache()

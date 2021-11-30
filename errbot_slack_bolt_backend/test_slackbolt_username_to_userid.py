@@ -1,4 +1,4 @@
-from .slackbolt import SlackBoltBackend
+from .slackbolt import SlackBoltBackend, Utils
 from unittest.mock import MagicMock, call, patch
 import pytest
 from errbot.backends.base import UserDoesNotExistError
@@ -52,7 +52,7 @@ class Test_with_pagination:
         mocked_backend.webclient.users_list = MagicMock(side_effect = get_rate_limited_slack_response_error())
         with pytest.raises(Exception):
             mocked_backend.username_to_userid(self.user.name)
-        assert mocked_backend.webclient.users_list.call_count == mocked_backend.PAGINATION_RETRY_LIMIT
+        assert mocked_backend.webclient.users_list.call_count == Utils.PAGINATION_RETRY_LIMIT + 1
 
     def test_success_when_rate_limited_error_raises_with_retry_after(self, mocked_backend):
         mocked_backend.clear_users_cache()
