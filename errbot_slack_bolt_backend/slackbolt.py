@@ -101,16 +101,22 @@ class Utils:
         for item in data:
             if item[key] == value:
                 return item
+        return None
 
     @staticmethod
-    def paginate_safely(fetch_func, func_kwargs={}):
+    def get_items(fetch_page_fn, fn_kwargs={}):
+        """
+        Get items page by page using the fetch page function
+        """
         data = []
         next_cursor = None
-        for i in range(Utils.PAGINATION_RETRY_LIMIT):
+        i = 0
+        while i < Utils.PAGINATION_RETRY_LIMIT:
             try:
                 while True:
-                    partial_data, next_cursor = fetch_func(cursor=next_cursor, **func_kwargs)
-                    data.extend(partial_data)
+                    partial_data, next_cursor = fetch_page_fn(cursor=next_cursor, **fn_kwargs)
+                    i = 0
+                    data += partial_data
                     if not next_cursor:
                         break
             except SlackApiError as e:
@@ -374,8 +380,7 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 500
     CONVERSATIONS_PAGE_LIMIT = 500
-    PAGINATION_RETRY_LIMIT = 3
-    DEFAULT_CACHE_TTL = 4 * 60 * 60  # 4 hours
+    CACHE_TTL_SECONDS = 4 * 60 * 60
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -610,17 +615,19 @@ class SlackBoltBackend(ErrBot):
             raise UserDoesNotExistError(f"Cannot find user {name}.")
         return user["id"]
 
-    def __find_user_by_name(self, name, can_refresh_cache=True):
+    def __find_user_by_name(self, name, is_first_call=True):
         users = self.__get_users()
         user = Utils.get_item_by_key(users, 'name', name)
-        if not user and can_refresh_cache:
+        if not user and is_first_call:
             self.clear_users_cache()
-            return self.__find_user_by_name(name, can_refresh_cache=False)
+            return self.__find_user_by_name(name, is_first_call=False)
         return user
     
-    @cached(ttl=DEFAULT_CACHE_TTL)
+    @cached(ttl=CACHE_TTL_SECONDS)
     def __get_users(self):
-        return Utils.paginate_safely(self.__get_users_page)
+        users = Utils.get_items(self.__get_users_page)
+        log.debug(f"{len(users)} users cached")
+        return users
 
     def clear_users_cache(self):
         self.__get_users.cache_clear()
@@ -646,17 +653,19 @@ class SlackBoltBackend(ErrBot):
             raise RoomDoesNotExistError(f"No channel named {name} exists")
         return channel["id"]
 
-    def __find_conversation_by_name(self, name, **kwargs):
+    def __find_conversation_by_name(self, name, is_first_call=True, **kwargs):
         conversations = self.__get_conversations(**kwargs)
         channel = Utils.get_item_by_key(conversations, 'name', name)
-        if not channel and kwargs.get('can_refresh_cache'):
+        if not channel and is_first_call:
             self.clear_conversations_cache()
-            return self.__find_conversation_by_name(name, can_refresh_cache=False, **kwargs)
+            return self.__find_conversation_by_name(name, is_first_call=False, **kwargs)
         return channel
 
-    @cached(ttl=DEFAULT_CACHE_TTL)
+    @cached(ttl=CACHE_TTL_SECONDS)
     def __get_conversations(self, **kwargs):
-        return Utils.paginate_safely(self.__get_conversations_page, func_kwargs=kwargs)
+        conversations = Utils.get_items(self.__get_conversations_page, fn_kwargs=kwargs)
+        log.debug(f"{len(conversations)} conversations cached")
+        return conversations
 
     def clear_conversations_cache(self):
         self.__get_conversations.cache_clear()
