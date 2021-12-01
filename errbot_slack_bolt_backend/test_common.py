@@ -1,5 +1,8 @@
 import os
 
+from slack_sdk.errors import SlackApiError
+from slack_sdk.web.slack_response import SlackResponse
+
 class DummyUser:
     def __init__(self, id, name):
         self.id = id
@@ -24,3 +27,14 @@ class SlackBoltBackendConfig:
             'bot_token': os.environ.get('SLACK_BOT_TOKEN'),
             'app_token': os.environ.get('SLACK_APP_TOKEN')
         }
+
+def get_rate_limited_slack_response_error():
+    return SlackApiError('ratelimited', SlackResponse(
+        data={'ok': False,'error': 'ratelimited'},
+        client=None,
+        headers={'retry-after': '0'},
+        req_args=None,
+        api_url="",
+        http_verb="",
+        status_code=400
+    ))

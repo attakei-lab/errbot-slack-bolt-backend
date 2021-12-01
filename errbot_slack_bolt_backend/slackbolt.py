@@ -26,11 +26,11 @@ from errbot.backends.base import (
     RoomOccupant,
     Stream,
     UserDoesNotExistError,
-    UserNotUniqueError,
 )
 from errbot.core import ErrBot
 from errbot.rendering.ansiext import IMTEXT_CHRS, AnsiExtension, enable_format
 from errbot.utils import split_string_after
+from memoization import cached
 
 log = logging.getLogger(__name__)
 
@@ -94,11 +94,43 @@ def slack_markdown_converter(compact_output=False):
 
 
 class Utils:
+    PAGINATION_RETRY_LIMIT = 3
+
     @staticmethod
     def get_item_by_key(data, key, value):
         for item in data:
             if item[key] == value:
                 return item
+        return None
+
+    @staticmethod
+    def get_items(fetch_page_fn, kwargs={}):
+        """
+        Get items page by page using the fetch page function
+        """
+        data = []
+        next_cursor = None
+        retry_count = 0
+        while True:
+            try:
+                partial_data, next_cursor = fetch_page_fn(cursor=next_cursor, **kwargs)
+                data += partial_data
+                retry_count = 0
+                if not next_cursor:
+                    break
+            except SlackApiError as e:
+                if e.response['error'] == 'ratelimited':
+                    if retry_count == Utils.PAGINATION_RETRY_LIMIT:
+                        # see: https://api.slack.com/docs/rate-limits#tier_t2
+                        raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
+                    retry_count += 1
+                    retry_after = e.response.headers['retry-after']
+                    log.info(f"Retrying for {retry_count}-th time. Sleeping {retry_after} seconds")
+                    time.sleep(int(retry_after))
+                    continue
+                raise e
+        return data
+
 
 class LinkPreProcessor(Preprocessor):
     """
@@ -346,7 +378,7 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 class SlackBoltBackend(ErrBot):
     USERS_PAGE_LIMIT = 500
     CONVERSATIONS_PAGE_LIMIT = 500
-    PAGINATION_RETRY_LIMIT = 3
+    CACHE_TTL_SECONDS = 4 * 60 * 60
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -581,18 +613,25 @@ class SlackBoltBackend(ErrBot):
             raise UserDoesNotExistError(f"Cannot find user {name}.")
         return user["id"]
 
-    def __find_user_by_name(self, name):
-        next_cursor = None
-        while True:
-            members, next_cursor = self.__get_users(limit = self.USERS_PAGE_LIMIT, cursor = next_cursor)
-            user = Utils.get_item_by_key(members, 'name', name)
-            if user:
-                return user
-            elif len(next_cursor) == 0:
-                return None
+    def __find_user_by_name(self, name, is_first_call=True):
+        users = self.__get_users()
+        user = Utils.get_item_by_key(users, 'name', name)
+        if not user and is_first_call:
+            self.clear_users_cache()
+            return self.__find_user_by_name(name, is_first_call=False)
+        return user
+    
+    @cached(ttl=CACHE_TTL_SECONDS)
+    def __get_users(self):
+        users = Utils.get_items(self.__get_users_page)
+        log.debug(f"{len(users)} users cached")
+        return users
 
-    def __get_users(self, **kwargs):
-        response = self.webclient.users_list(**kwargs)
+    def clear_users_cache(self):
+        self.__get_users.cache_clear()
+
+    def __get_users_page(self, **kwargs):
+        response = self.webclient.users_list(limit=self.USERS_PAGE_LIMIT, **kwargs)
         members = response['members']
         next_cursor = response['response_metadata']['next_cursor']
         return members, next_cursor
@@ -607,40 +646,33 @@ class SlackBoltBackend(ErrBot):
     def channelname_to_channelid(self, name: str):
         """Convert a Slack channel name to its channel ID"""
         name = name.lstrip("#")
-        channel = self.__find_conversation_by_name(name, types="public_channel,private_channel", limit=self.CONVERSATIONS_PAGE_LIMIT)
+        channel = self.__find_conversation_by_name(name, types="public_channel,private_channel")
         if not channel:
             raise RoomDoesNotExistError(f"No channel named {name} exists")
         return channel["id"]
 
-    def __find_conversation_by_name(self, name, **kwargs):
-        next_cursor = None
-        while True:
-            conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
-            channel = Utils.get_item_by_key(conversations, 'name', name)
-            if channel:
-                return channel
-            elif len(next_cursor) == 0:
-                return None
+    def __find_conversation_by_name(self, name, is_first_call=True, **kwargs):
+        conversations = self.__get_conversations(**kwargs)
+        channel = Utils.get_item_by_key(conversations, 'name', name)
+        if not channel and is_first_call:
+            self.clear_conversations_cache()
+            return self.__find_conversation_by_name(name, is_first_call=False, **kwargs)
+        return channel
 
-    # pylint: disable=invalid-name
-    def __index_conversations(self, **kwargs):
-        for i in range(self.PAGINATION_RETRY_LIMIT):
-            try:
-                response = self.webclient.conversations_list(**kwargs)
-                break
-            except SlackApiError as e:
-                if e.response['error'] == 'ratelimited':
-                    if i == self.PAGINATION_RETRY_LIMIT - 1:
-                        # see: https://api.slack.com/docs/rate-limits#tier_t2
-                        raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
-                    retry_after = e.response.headers['retry-after']
-                    log.info(f"Retrying for {i+1}-th time. Sleeping {retry_after} seconds")
-                    time.sleep(int(retry_after))
-                    continue
-                raise e
-        channels = response['channels']
+    @cached(ttl=CACHE_TTL_SECONDS)
+    def __get_conversations(self, **kwargs):
+        conversations = Utils.get_items(self.__get_conversations_page, kwargs=kwargs)
+        log.debug(f"{len(conversations)} conversations cached")
+        return conversations
+
+    def clear_conversations_cache(self):
+        self.__get_conversations.cache_clear()
+
+    def __get_conversations_page(self, **kwargs):
+        response = self.webclient.conversations_list(limit=self.CONVERSATIONS_PAGE_LIMIT, **kwargs)
+        conversations = response['channels']
         next_cursor = response['response_metadata']['next_cursor']
-        return channels, next_cursor
+        return conversations, next_cursor
 
     def find_user_profile(self, user):
         response = self.webclient.users_profile_get(user=user, include_labels=True)
@@ -670,18 +702,12 @@ class SlackBoltBackend(ErrBot):
           - Conversations list: https://api.slack.com/methods/conversations.list
         """
         # TODO: consider remove "exclude_archived"
-        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived, limit=self.CONVERSATIONS_PAGE_LIMIT)
+        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived)
 
         return conversations # + groups
 
     def __fetch_conversations(self, joined_only, **kwargs):
-        next_cursor = None
-        conversations = []
-        while True:
-            page_conversations, next_cursor = self.__index_conversations(cursor=next_cursor, **kwargs)
-            conversations.extend(page_conversations)
-            if len(next_cursor) == 0:
-                break
+        conversations = self.__get_conversations(**kwargs)
         return self.__filtered_channels(conversations, joined_only)
 
     def __filtered_channels(self, channels, joined_only):
