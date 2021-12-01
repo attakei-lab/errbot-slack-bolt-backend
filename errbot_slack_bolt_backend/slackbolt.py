@@ -110,28 +110,25 @@ class Utils:
         """
         data = []
         next_cursor = None
-        i = 0
-        while i <= Utils.PAGINATION_RETRY_LIMIT:
+        retry_count = 0
+        while True:
             try:
-                while True:
-                    partial_data, next_cursor = fetch_page_fn(cursor=next_cursor, **kwargs)
-                    i = 0
-                    data += partial_data
-                    if not next_cursor:
-                        break
+                partial_data, next_cursor = fetch_page_fn(cursor=next_cursor, **kwargs)
+                data += partial_data
+                retry_count = 0
+                if not next_cursor:
+                    break
             except SlackApiError as e:
                 if e.response['error'] == 'ratelimited':
-                    if i == Utils.PAGINATION_RETRY_LIMIT:
+                    if retry_count == Utils.PAGINATION_RETRY_LIMIT:
                         # see: https://api.slack.com/docs/rate-limits#tier_t2
                         raise Exception("Too many requests were made. Please, try again in 1 minute.") from e
-                    i += 1
+                    retry_count += 1
                     retry_after = e.response.headers['retry-after']
-                    log.info(f"Retrying for {i}-th time. Sleeping {retry_after} seconds")
+                    log.info(f"Retrying for {retry_count}-th time. Sleeping {retry_after} seconds")
                     time.sleep(int(retry_after))
                     continue
                 raise e
-            if not next_cursor:
-                break
         return data
 
 
