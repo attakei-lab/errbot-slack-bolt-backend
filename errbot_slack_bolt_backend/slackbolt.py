@@ -829,9 +829,6 @@ class SlackBoltBackend(ErrBot):
 
             msg.extras["ts"] = timestamps
         except SlackApiError as e:
-            print(msg.__dict__)
-            print(msg.__dict__['_to'].__dict__)
-            print()
             if e.response['error'] == 'not_in_channel':
                 if msg.to.is_archived:
                     log.error("The Channel defined as Admin Channel is archived.")
