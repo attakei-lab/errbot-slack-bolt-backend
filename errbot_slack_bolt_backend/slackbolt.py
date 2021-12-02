@@ -161,7 +161,8 @@ class SlackPerson(Person):
     This class describes a person on Slack's network.
     """
 
-    def __init__(self, webclient: WebClient, userid=None, channelid=None):
+    def __init__(self, webclient: WebClient, userid=None, channelid=None, \
+        username=None, fullname=None, email=None, is_deleted=None):
         if userid is not None and userid[0] not in ("U", "B", "W"):
             raise Exception(
                 f"This is not a Slack user or bot id: {userid} (should start with U, B or W)"
@@ -174,11 +175,12 @@ class SlackPerson(Person):
 
         self._userid = userid
         self._channelid = channelid
-        self._webclient = webclient
-        self._username = None  # cache
-        self._fullname = None
         self._channelname = None
-        self._email = None
+        self._username = username
+        self._fullname = fullname
+        self._email = email
+        self._is_deleted = is_deleted
+        self._webclient = webclient
 
     @property
     def userid(self):
@@ -279,6 +281,10 @@ class SlackPerson(Person):
 
     def __hash__(self):
         return self.userid.__hash__()
+    
+    @property
+    def is_deleted(self):
+        return self._is_deleted
 
     @property
     def person(self):
@@ -757,8 +763,6 @@ class SlackBoltBackend(ErrBot):
         return to_humanreadable, to_channel_id
 
     def send_message(self, msg):
-        super().send_message(msg)
-
         if msg.parent is not None:
             # we are asked to reply to a specify thread.
             try:
@@ -824,6 +828,16 @@ class SlackBoltBackend(ErrBot):
                 timestamps.append(result["ts"])
 
             msg.extras["ts"] = timestamps
+        except SlackApiError as e:
+            print(msg.__dict__)
+            print(msg.__dict__['_to'].__dict__)
+            print()
+            if e.response['error'] == 'not_in_channel':
+                if msg.to.is_archived:
+                    log.error("The Channel defined as Admin Channel is archived.")
+                    raise Exception("The Admin Channel is archived.") from e
+                log.error("The bot is not in the admin channel. Please go to the channel and add the App.")
+                raise Exception("An Admin Channel was defined but the bot is not there.") from e
         except Exception:
             log.exception(
                 f"An exception occurred while trying to send the following message "
@@ -1045,16 +1059,21 @@ class SlackBoltBackend(ErrBot):
             txtrep
         )
 
+        user = None
+
         if userid is None and username is not None:
-            userid = self.username_to_userid(username)
+            user = self.__find_user_by_name(username)
+            userid = user['id']
         if channelid is None and channelname is not None:
-            channelid = self.channelname_to_channelid(channelname)
+            channel = self.__find_conversation_by_name(channelname)
+            channelid = channel['id']
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, userid, channelid, bot=self)
         if userid is not None:
-            return SlackPerson(self.webclient, userid, self.get_im_channel(userid))
+            return SlackPerson(self.webclient, userid, self.get_im_channel(userid), username=user['name'], \
+                fullname=user['real_name'], email=user['profile']['email'], is_deleted=user['deleted'])
         if channelid is not None:
-            return SlackRoom(webclient=self.webclient, channelid=channelid, bot=self)
+            return SlackRoom(webclient=self.webclient, channelid=channelid, bot=self, is_archived=channel['is_archived'])
 
         raise Exception(
             "You found a bug. I expected at least one of userid, channelid, username or channelname "
@@ -1214,7 +1233,7 @@ class SlackBoltBackend(ErrBot):
 
 
 class SlackRoom(Room):
-    def __init__(self, webclient=None, name=None, channelid=None, bot=None):
+    def __init__(self, webclient=None, name=None, channelid=None, bot=None, is_archived=None):
         if channelid is not None and name is not None:
             raise ValueError("channelid and name are mutually exclusive")
 
@@ -1228,6 +1247,7 @@ class SlackRoom(Room):
 
         self._id = channelid
         self._bot = bot
+        self._is_archived = is_archived
         self.webclient = webclient
 
     def __str__(self):
@@ -1409,6 +1429,10 @@ class SlackRoom(Room):
                     raise SlackAPIResponseError(
                         error=f'Slack API call to {method} failed: {response["error"]}.'
                     )
+
+    @property
+    def is_archived(self):
+        return self._is_archived
 
     def __eq__(self, other):
         if not isinstance(other, SlackRoom):
