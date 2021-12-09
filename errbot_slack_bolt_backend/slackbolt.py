@@ -832,7 +832,7 @@ class SlackBoltBackend(ErrBot):
             if e.response['error'] == 'not_in_channel':
                 if msg.to.is_archived:
                     log.error("The Channel defined as Admin Channel is archived.")
-                    raise Exception("The Admin Channel is archived.") from e
+                    raise Exception("An Admin Channel was defined but it's unreachable.") from e
                 log.error("The bot is not in the admin channel. Please go to the channel and add the App.")
                 raise Exception("An Admin Channel was defined but the bot is not there.") from e
         except Exception:
@@ -1068,7 +1068,7 @@ class SlackBoltBackend(ErrBot):
             return SlackRoomOccupant(self.webclient, userid, channelid, bot=self)
         if userid is not None:
             return SlackPerson(self.webclient, userid, self.get_im_channel(userid), username=user['name'], \
-                fullname=user['real_name'], email=user['profile']['email'], is_deleted=user['deleted'])
+                fullname=user.get('real_name'), email=user['profile']['email'], is_deleted=user['deleted'])
         if channelid is not None:
             return SlackRoom(webclient=self.webclient, channelid=channelid, bot=self, is_archived=channel['is_archived'])
 
