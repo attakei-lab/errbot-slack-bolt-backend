@@ -258,14 +258,7 @@ class SlackPerson(Person):
 
     @property
     def email(self):
-        """Convert a Slack user ID to their user email"""
-        user = self._webclient.users_info(user=self._userid)["user"]
-        if user is None:
-            log.error("Cannot find user with ID %s", self._userid)
-            return "<%s>" % self._userid
-
-        email = user["profile"]["email"]
-        return email
+        return self._email
 
     def __unicode__(self):
         return f"@{self.username}"
@@ -1063,7 +1056,7 @@ class SlackBoltBackend(ErrBot):
             userid = user['id']
         if channelid is None and channelname is not None:
             channel = self.__find_conversation_by_name(channelname)
-            channelid = channel['id']
+            channelid = channel['id'] if channel is not None else None
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, userid, channelid, bot=self)
         if userid is not None:
