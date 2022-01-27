@@ -6,7 +6,7 @@ import re
 import sys
 import time
 from functools import lru_cache
-from typing import BinaryIO
+from typing import BinaryIO, Dict
 
 from markdown import Markdown
 from markdown.extensions.extra import ExtraExtension
@@ -291,13 +291,18 @@ class SlackRoomOccupant(RoomOccupant, SlackPerson):
     This class represents a person inside a MUC.
     """
 
-    def __init__(self, webclient: WebClient, userid, channelid, bot):
-        super().__init__(webclient, userid, channelid)
+    def __init__(self, webclient: WebClient, user: Dict, channelid, bot):
+        super().__init__(webclient, user.get('id'), channelid)
         self._room = SlackRoom(webclient=webclient, channelid=channelid, bot=bot)
+        self._email = user.get('profile').get('email')
 
     @property
     def room(self):
         return self._room
+    
+    @property
+    def email(self):
+        return self._email
 
     def __unicode__(self):
         return f"#{self._room.name}/{self.username}"
@@ -557,7 +562,8 @@ class SlackBoltBackend(ErrBot):
                     bot_username=event.get("username", ""),
                 )
             else:
-                msg.frm = SlackPerson(webclient, event["user"], event["channel"])
+                username = self.userid_to_username(event["user"])
+                msg.frm = self.build_identifier(f'@{username}')
             msg.to = SlackPerson(
                 webclient, self.bot_identifier.userid, event["channel"]
             )
@@ -572,8 +578,10 @@ class SlackBoltBackend(ErrBot):
                     bot=self,
                 )
             else:
+                username = self.userid_to_username(event["user"])
+                user = self.__find_user_by_name(username)
                 msg.frm = SlackRoomOccupant(
-                    webclient, event["user"], event["channel"], bot=self
+                    webclient, user, event["channel"], bot=self
                 )
             msg.to = SlackRoom(
                 webclient=webclient, channelid=event["channel"], bot=self
@@ -1058,7 +1066,7 @@ class SlackBoltBackend(ErrBot):
             channel = self.__find_conversation_by_name(channelname)
             channelid = channel['id'] if channel is not None else None
         if userid is not None and channelid is not None:
-            return SlackRoomOccupant(self.webclient, userid, channelid, bot=self)
+            return SlackRoomOccupant(self.webclient, user, channelid, bot=self)
         if userid is not None:
             return SlackPerson(self.webclient, userid, self.get_im_channel(userid), username=user['name'], \
                 fullname=user.get('real_name'), email=user['profile']['email'], is_deleted=user['deleted'])
