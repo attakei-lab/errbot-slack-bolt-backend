@@ -30,12 +30,14 @@ class Test_build_identifier:
         return backend
     
     def test_slack_room_occupant(self, mocked_backend):
+        mocked_backend.extract_identifiers_from_string = MagicMock(return_value=(name, None, channelname, channelid))
         slack_room_occupant = mocked_backend.build_identifier('')
         assert isinstance(slack_room_occupant, SlackRoomOccupant)
         assert userid == slack_room_occupant.userid
         assert channelid == slack_room_occupant.channelid
     
     def test_slack_person(self, mocked_backend_with_user):
+        mocked_backend_with_user.clear_users_cache()
         slack_person = mocked_backend_with_user.build_identifier('')
         assert isinstance(slack_person, SlackPerson)
         assert userid == slack_person.userid
