@@ -17,8 +17,8 @@ class Test_channels:
         channels = mocked_backend.channels()
         assert len(channels) == 2
         assert len(mocked_backend.webclient.conversations_list.call_args_list) == 2
-        assert mocked_backend.webclient.conversations_list.call_args_list[0] == call(limit=1, cursor=None, exclude_archived=True)
-        assert mocked_backend.webclient.conversations_list.call_args_list[1] == call(limit=1, cursor="1", exclude_archived=True)
+        assert mocked_backend.webclient.conversations_list.call_args_list[0] == call(limit=1, types="public_channel,private_channel", cursor=None, exclude_archived=True)
+        assert mocked_backend.webclient.conversations_list.call_args_list[1] == call(limit=1, types="public_channel,private_channel", cursor="1", exclude_archived=True)
         assert channels[0] == DummyChannel(1, 'Test Channel 1', True).__dict__
         assert channels[1] == DummyChannel(2, 'Test Channel 2', True).__dict__
 

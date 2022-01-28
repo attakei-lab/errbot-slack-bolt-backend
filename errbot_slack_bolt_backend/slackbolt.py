@@ -652,7 +652,7 @@ class SlackBoltBackend(ErrBot):
     def channelname_to_channelid(self, name: str):
         """Convert a Slack channel name to its channel ID"""
         name = name.lstrip("#")
-        channel = self.__find_conversation_by_name(name, types="public_channel,private_channel")
+        channel = self.__find_conversation_by_name(name)
         if not channel:
             raise RoomDoesNotExistError(f"No channel named {name} exists")
         return channel["id"]
@@ -675,7 +675,7 @@ class SlackBoltBackend(ErrBot):
         self.__get_conversations.cache_clear()
 
     def __get_conversations_page(self, **kwargs):
-        response = self.webclient.conversations_list(limit=self.CONVERSATIONS_PAGE_LIMIT, **kwargs)
+        response = self.webclient.conversations_list(limit=self.CONVERSATIONS_PAGE_LIMIT, types="public_channel,private_channel", **kwargs)
         conversations = response['channels']
         next_cursor = response['response_metadata']['next_cursor']
         return conversations, next_cursor
@@ -831,6 +831,7 @@ class SlackBoltBackend(ErrBot):
         except SlackApiError as e:
             if e.response['error'] == 'not_in_channel':
                 if msg.to.is_archived:
+                    print(msg.to)
                     log.error("The Channel defined as Admin Channel is archived.")
                     raise Exception("An Admin Channel was defined but it's unreachable.") from e
                 log.error("The bot is not in the admin channel. Please go to the channel and add the App.")
