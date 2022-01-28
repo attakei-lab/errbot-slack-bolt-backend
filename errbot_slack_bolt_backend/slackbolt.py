@@ -161,11 +161,10 @@ class SlackPerson(Person):
     This class describes a person on Slack's network.
     """
 
-    def __init__(self, webclient: WebClient, userid=None, channelid=None, \
-        username=None, fullname=None, email=None, is_deleted=None):
-        if userid is not None and userid[0] not in ("U", "B", "W"):
+    def __init__(self, webclient: WebClient, user: Dict, channelid: str = None):
+        if user.get('id') is not None and user.get('id')[0] not in ("U", "B", "W"):
             raise Exception(
-                f"This is not a Slack user or bot id: {userid} (should start with U, B or W)"
+                f"This is not a Slack user or bot id: {user.get('id')} (should start with U, B or W)"
             )
 
         if channelid is not None and channelid[0] not in ("D", "C", "G"):
@@ -173,13 +172,13 @@ class SlackPerson(Person):
                 f"This is not a valid Slack channelid: {channelid} (should start with D, C or G)"
             )
 
-        self._userid = userid
+        self._userid = user.get('id')
         self._channelid = channelid
         self._channelname = None
-        self._username = username
-        self._fullname = fullname
-        self._email = email
-        self._is_deleted = is_deleted
+        self._username = user.get('name')
+        self._fullname = user.get('real_name')
+        self._email = user.get('profile').get('email') if user.get('profile') else None
+        self._is_deleted = user.get('deleted')
         self._webclient = webclient
 
     @property
@@ -292,7 +291,7 @@ class SlackRoomOccupant(RoomOccupant, SlackPerson):
     """
 
     def __init__(self, webclient: WebClient, user: Dict, channelid, bot):
-        super().__init__(webclient, user.get('id'), channelid)
+        super().__init__(webclient, user, channelid)
         self._room = SlackRoom(webclient=webclient, channelid=channelid, bot=bot)
         self._email = user.get('profile').get('email')
 
@@ -465,7 +464,7 @@ class SlackBoltBackend(ErrBot):
         self.bot_app = App(token=self.bot_token)
 
         auth_test = self.bot_app.client.auth_test()
-        self.bot_identifier = SlackPerson(self.bot_app.client, auth_test["user_id"])
+        self.bot_identifier = SlackPerson(self.bot_app.client, {'id': auth_test["user_id"]})
         self._hello_event_handler(self.bot_app.client, None)
         self._setup_slack_callbacks()
 
@@ -495,7 +494,7 @@ class SlackBoltBackend(ErrBot):
     def _presence_change_event_handler(self, webclient: WebClient, event):
         """Event handler for the 'presence_change' event"""
 
-        idd = SlackPerson(webclient, event["user"])
+        idd = SlackPerson(webclient, {'id': event["user"]})
         presence = event["presence"]
         # According to https://api.slack.com/docs/presence, presence can
         # only be one of 'active' and 'away'
@@ -565,7 +564,7 @@ class SlackBoltBackend(ErrBot):
                 username = self.userid_to_username(event["user"])
                 msg.frm = self.build_identifier(f'@{username}')
             msg.to = SlackPerson(
-                webclient, self.bot_identifier.userid, event["channel"]
+                webclient, {'id': self.bot_identifier.userid}, channelid=event["channel"]
             )
             channel_link_name = event["channel"]
         else:
@@ -599,7 +598,7 @@ class SlackBoltBackend(ErrBot):
 
     def _member_joined_channel_event_handler(self, webclient: WebClient, event):
         """Event handler for the 'member_joined_channel' event"""
-        user = SlackPerson(webclient, event["user"])
+        user = SlackPerson(webclient, {'id': event["user"]})
         if user == self.bot_identifier:
             self.callback_room_joined(
                 SlackRoom(webclient=webclient, channelid=event["channel"], bot=self)
@@ -1068,8 +1067,7 @@ class SlackBoltBackend(ErrBot):
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, user, channelid, bot=self)
         if userid is not None:
-            return SlackPerson(self.webclient, userid, self.get_im_channel(userid), username=user['name'], \
-                fullname=user.get('real_name'), email=user['profile']['email'], is_deleted=user['deleted'])
+            return SlackPerson(self.webclient, user, channelid=self.get_im_channel(userid))
         if channelid is not None:
             return SlackRoom(webclient=self.webclient, channelid=channelid, bot=self, is_archived=channel['is_archived'])
 
