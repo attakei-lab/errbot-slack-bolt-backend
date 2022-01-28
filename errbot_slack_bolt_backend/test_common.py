@@ -4,15 +4,18 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.web.slack_response import SlackResponse
 
 class DummyUser:
-    def __init__(self, id, name):
+    def __init__(self, id, name, profile={}, deleted=False):
         self.id = id
         self.name = name
+        self.profile = profile
+        self.deleted = deleted
 
 class DummyChannel:
-    def __init__(self, id, name, is_member):
+    def __init__(self, id, name, is_member, is_archived=False):
         self.id = id
         self.name = name
         self.is_member = is_member
+        self.is_archived = is_archived
 
 class SlackBoltBackendConfig:
     def __init__(self):
