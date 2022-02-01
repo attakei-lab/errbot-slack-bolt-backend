@@ -17,13 +17,21 @@ class Test_channels:
         channels = mocked_backend.channels()
         assert len(channels) == 2
         assert len(mocked_backend.webclient.conversations_list.call_args_list) == 2
-        assert mocked_backend.webclient.conversations_list.call_args_list[0] == call(limit=1, cursor=None, exclude_archived=True)
-        assert mocked_backend.webclient.conversations_list.call_args_list[1] == call(limit=1, cursor="1", exclude_archived=True)
+        assert mocked_backend.webclient.conversations_list.call_args_list[0] == call(limit=1, types="public_channel,private_channel", cursor=None, exclude_archived=True)
+        assert mocked_backend.webclient.conversations_list.call_args_list[1] == call(limit=1, types="public_channel,private_channel", cursor="1", exclude_archived=True)
         assert channels[0] == DummyChannel(1, 'Test Channel 1', True).__dict__
-        assert channels[1] == DummyChannel(2, 'Test Channel 2', True).__dict__
+        assert channels[1] == DummyChannel(2, 'Test PV Channel 1', True, is_private=True).__dict__
+    
+    def test_returns_only_public_channels(self, mocked_backend):
+        mocked_backend.clear_conversations_cache()
+        channels = mocked_backend.channels(types='public_channel')
+        assert len(channels) == 1
+        assert len(mocked_backend.webclient.conversations_list.call_args_list) == 1
+        assert mocked_backend.webclient.conversations_list.call_args_list[0] == call(limit=1, types="public_channel", cursor=None, exclude_archived=True)
+        assert channels[0] == DummyChannel(1, 'Test Channel 1', True).__dict__
 
 class Test_channelname_to_channelid:
-    channel = DummyChannel(2, '#Test Channel 2', True)
+    channel = DummyChannel(2, '#Test PV Channel 1', True, is_private=True)
 
     @pytest.fixture
     def mocked_backend(self):
@@ -54,7 +62,7 @@ class Test_channelname_to_channelid:
     def test_success_when_rate_limited_error_raises_with_retry_after(self, mocked_backend):
         mocked_backend.clear_conversations_cache()
         with patch('time.sleep') as sleep_mock:
-            mocked_backend.webclient.conversations_list = MagicMock(side_effect = [get_rate_limited_slack_response_error(), conversations_list(cursor='1')])
+            mocked_backend.webclient.conversations_list = MagicMock(side_effect = [get_rate_limited_slack_response_error(), conversations_list(cursor='1', types='public_channel,private_channel')])
             mocked_backend.channelname_to_channelid(self.channel.name)
             assert mocked_backend.webclient.conversations_list.call_count == 2
             sleep_mock.assert_called_once_with(0)
@@ -74,6 +82,11 @@ class Test_channelname_to_channelid:
         mocked_backend.clear_conversations_cache()
         mocked_backend.channelname_to_channelid(self.channel.name)
         assert len(mocked_backend.webclient.conversations_list.call_args_list) == 4
+        
+    def test_private_channel_not_present_when_fetching_only_public(self, mocked_backend):
+        mocked_backend.clear_conversations_cache()
+        with pytest.raises(RoomDoesNotExistError):
+            mocked_backend.channelname_to_channelid(self.channel.name, types='public_channel')
 
 def inject_mocks():
     backend = SlackBoltBackend(SlackBoltBackendConfig())
@@ -95,8 +108,9 @@ def prepare_response(data, next_cursor):
     }
 
 def conversations_list(**kwargs):
+    consider_private_channels = kwargs.get('types') and 'private_channel' in kwargs.get('types')
     if not kwargs['cursor']:
-        return prepare_response([DummyChannel(1, 'Test Channel 1', True).__dict__], "1")
+        return prepare_response([DummyChannel(1, 'Test Channel 1', True).__dict__], "1" if consider_private_channels else "")
     else:
-        return prepare_response([DummyChannel(2, 'Test Channel 2', True).__dict__], "")
+        return prepare_response([DummyChannel(2, 'Test PV Channel 1', True, is_private=True).__dict__], "")
 

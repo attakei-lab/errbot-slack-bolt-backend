@@ -11,11 +11,12 @@ class DummyUser:
         self.deleted = deleted
 
 class DummyChannel:
-    def __init__(self, id, name, is_member, is_archived=False):
+    def __init__(self, id, name, is_member, is_archived=False, is_private=False):
         self.id = id
         self.name = name
         self.is_member = is_member
         self.is_archived = is_archived
+        self.is_private = is_private
 
 class SlackBoltBackendConfig:
     def __init__(self):

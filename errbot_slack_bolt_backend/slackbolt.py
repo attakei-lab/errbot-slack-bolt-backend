@@ -649,10 +649,10 @@ class SlackBoltBackend(ErrBot):
             raise RoomDoesNotExistError(f"No channel with ID {id_} exists.")
         return channel["name"]
 
-    def channelname_to_channelid(self, name: str):
+    def channelname_to_channelid(self, name: str, types='public_channel,private_channel'):
         """Convert a Slack channel name to its channel ID"""
         name = name.lstrip("#")
-        channel = self.__find_conversation_by_name(name, types="public_channel,private_channel")
+        channel = self.__find_conversation_by_name(name, types=types)
         if not channel:
             raise RoomDoesNotExistError(f"No channel named {name} exists")
         return channel["id"]
@@ -684,7 +684,7 @@ class SlackBoltBackend(ErrBot):
         response = self.webclient.users_profile_get(user=user, include_labels=True)
         return response['profile']
 
-    def channels(self, exclude_archived=True, joined_only=False):
+    def channels(self, exclude_archived=True, joined_only=False, types='public_channel,private_channel'):
         """
         Get all channels and groups and return information about them.
 
@@ -692,6 +692,8 @@ class SlackBoltBackend(ErrBot):
             Exclude archived channels/groups
         :param joined_only:
             Filter out channels the bot hasn't joined
+        :param types:
+            A list of channel types separated by comma in a single string.
         :returns:
             A list of channel (https://api.slack.com/types/channel)
             and group (https://api.slack.com/types/group) types.
@@ -708,7 +710,7 @@ class SlackBoltBackend(ErrBot):
           - Conversations list: https://api.slack.com/methods/conversations.list
         """
         # TODO: consider remove "exclude_archived"
-        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived)
+        conversations = self.__fetch_conversations(joined_only=joined_only, exclude_archived=exclude_archived, types=types)
 
         return conversations # + groups
 
@@ -1062,7 +1064,7 @@ class SlackBoltBackend(ErrBot):
             user = self.__find_user_by_name(username)
             userid = user['id']
         if channelid is None and channelname is not None:
-            channel = self.__find_conversation_by_name(channelname)
+            channel = self.__find_conversation_by_name(channelname, types='public_channel,private_channel')
             channelid = channel['id'] if channel is not None else None
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, user, channelid, bot=self)
