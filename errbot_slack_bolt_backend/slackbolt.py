@@ -6,7 +6,6 @@ import re
 import sys
 import time
 from functools import lru_cache
-from types import NoneType
 from typing import BinaryIO, Dict
 
 from markdown import Markdown
