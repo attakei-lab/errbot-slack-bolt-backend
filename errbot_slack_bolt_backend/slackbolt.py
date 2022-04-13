@@ -6,6 +6,7 @@ import re
 import sys
 import time
 from functools import lru_cache
+from types import NoneType
 from typing import BinaryIO, Dict
 
 from markdown import Markdown
@@ -328,7 +329,7 @@ class SlackBot(SlackPerson):
     def __init__(self, webclient: WebClient, bot_id, bot_username):
         self._bot_id = bot_id
         self._bot_username = bot_username
-        super().__init__(webclient, userid=bot_id)
+        super().__init__(webclient, user={'id': bot_id})
 
     @property
     def username(self):
@@ -360,6 +361,10 @@ class SlackRoomBot(RoomOccupant, SlackBot):
     @property
     def room(self):
         return self._room
+
+    @property
+    def id(self):
+        return self._bot_id        
 
     def __unicode__(self):
         return f"#{self._room.name}/{self.username}"
@@ -611,20 +616,37 @@ class SlackBoltBackend(ErrBot):
             raise UserDoesNotExistError(f"Cannot find user with ID {id_}.")
         return user["name"]
 
-    def username_to_userid(self, name: str):
-        """Convert a Slack user name to their user ID"""
+    def username_to_user(self, name: str):
+        """Convert a Slack user name to their user"""
         name = name.lstrip("@")
         user = self.__find_user_by_name(name)
         if not user:
             raise UserDoesNotExistError(f"Cannot find user {name}.")
+        return user
+
+    def username_to_userid(self, name: str):
+        user = self.username_to_user(name)
         return user["id"]
 
+    def username_to_bot_id(self, name: str):
+        user = self.username_to_user(name)
+        return user["profile"]["bot_id"]
+
+    # TODO Refactor and merge with the method below 
     def __find_user_by_name(self, name, is_first_call=True):
         users = self.__get_users()
         user = Utils.get_item_by_key(users, 'name', name)
         if not user and is_first_call:
             self.clear_users_cache()
             return self.__find_user_by_name(name, is_first_call=False)
+        return user
+
+    def __find_user_by_id(self, id_: str, is_first_call=True):
+        users = self.__get_users()
+        user = Utils.get_item_by_key(users, 'id', id_)
+        if not user and is_first_call:
+            self.clear_users_cache()
+            return self.__find_user_by_id(id_, is_first_call=False)
         return user
     
     @cached(ttl=CACHE_TTL_SECONDS)
@@ -1069,6 +1091,9 @@ class SlackBoltBackend(ErrBot):
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, user, channelid, bot=self)
         if userid is not None:
+            # TODO Add tests
+            if user is None:
+                user = self.__find_user_by_id(userid)
             return SlackPerson(self.webclient, user, channelid=self.get_im_channel(userid))
         if channelid is not None:
             return SlackRoom(webclient=self.webclient, channelid=channelid, bot=self, is_archived=channel['is_archived'])
@@ -1228,6 +1253,11 @@ class SlackBoltBackend(ErrBot):
                 text = text.replace(word, str(identifier))
 
         return text, mentioned
+
+    # TODO Test
+    def resolve_access_form_bot_id(self):
+        bot_id = self.username_to_bot_id(self.bot_config.ACCESS_FORM_BOT_INFO.get('nickname'))
+        self.bot_config.ACCESS_FORM_BOT_INFO['bot_id'] = bot_id
 
 
 class SlackRoom(Room):
