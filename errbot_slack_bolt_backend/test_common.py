@@ -31,6 +31,10 @@ class SlackBoltBackendConfig:
             'bot_token': os.environ.get('SLACK_BOT_TOKEN'),
             'app_token': os.environ.get('SLACK_APP_TOKEN')
         }
+        self.ACCESS_FORM_BOT_INFO = {
+            "bot_id": None,
+            "nickname": os.environ.get("SDM_ACCESS_FORM_BOT_NICKNAME")
+        }
 
 def get_rate_limited_slack_response_error():
     return SlackApiError('ratelimited', SlackResponse(

@@ -582,7 +582,7 @@ class SlackBoltBackend(ErrBot):
                 )
             else:
                 username = self.userid_to_username(event["user"])
-                user = self.__find_user_by_name(username)
+                user = self.__find_user('name', username)
                 msg.frm = SlackRoomOccupant(
                     webclient, user, event["channel"], bot=self
                 )
@@ -618,7 +618,7 @@ class SlackBoltBackend(ErrBot):
     def username_to_user(self, name: str):
         """Convert a Slack user name to their user"""
         name = name.lstrip("@")
-        user = self.__find_user_by_name(name)
+        user = self.__find_user('name', name)
         if not user:
             raise UserDoesNotExistError(f"Cannot find user {name}.")
         return user
@@ -631,21 +631,12 @@ class SlackBoltBackend(ErrBot):
         user = self.username_to_user(name)
         return user["profile"]["bot_id"]
 
-    # TODO Refactor and merge with the method below 
-    def __find_user_by_name(self, name, is_first_call=True):
+    def __find_user(self, key, value, is_first_call=True):
         users = self.__get_users()
-        user = Utils.get_item_by_key(users, 'name', name)
+        user = Utils.get_item_by_key(users, key, value)
         if not user and is_first_call:
             self.clear_users_cache()
-            return self.__find_user_by_name(name, is_first_call=False)
-        return user
-
-    def __find_user_by_id(self, id_: str, is_first_call=True):
-        users = self.__get_users()
-        user = Utils.get_item_by_key(users, 'id', id_)
-        if not user and is_first_call:
-            self.clear_users_cache()
-            return self.__find_user_by_id(id_, is_first_call=False)
+            return self.__find_user(key, value, is_first_call=False)
         return user
     
     @cached(ttl=CACHE_TTL_SECONDS)
@@ -1082,7 +1073,7 @@ class SlackBoltBackend(ErrBot):
         user = None
 
         if userid is None and username is not None:
-            user = self.__find_user_by_name(username)
+            user = self.__find_user('name', username)
             userid = user['id']
         if channelid is None and channelname is not None:
             channel = self.__find_conversation_by_name(channelname, types='public_channel,private_channel')
@@ -1090,9 +1081,8 @@ class SlackBoltBackend(ErrBot):
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, user, channelid, bot=self)
         if userid is not None:
-            # TODO Add tests
             if user is None:
-                user = self.__find_user_by_id(userid)
+                user = self.__find_user('id', userid)
             return SlackPerson(self.webclient, user, channelid=self.get_im_channel(userid))
         if channelid is not None:
             return SlackRoom(webclient=self.webclient, channelid=channelid, bot=self, is_archived=channel['is_archived'])
@@ -1253,7 +1243,6 @@ class SlackBoltBackend(ErrBot):
 
         return text, mentioned
 
-    # TODO Test
     def resolve_access_form_bot_id(self):
         bot_id = self.username_to_bot_id(self.bot_config.ACCESS_FORM_BOT_INFO.get('nickname'))
         self.bot_config.ACCESS_FORM_BOT_INFO['bot_id'] = bot_id
