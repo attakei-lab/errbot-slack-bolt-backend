@@ -294,7 +294,7 @@ class SlackRoomOccupant(RoomOccupant, SlackPerson):
         super().__init__(webclient, user, channelid)
         self._room = SlackRoom(webclient=webclient, channelid=channelid, bot=bot)
         self._email = user.get('profile').get('email')
-        self.user = user
+        self._user = user
 
     @property
     def room(self):
@@ -302,7 +302,7 @@ class SlackRoomOccupant(RoomOccupant, SlackPerson):
     
     @property
     def id(self):
-        return self.user.get('profile').get('bot_id')
+        return self._user.get('profile').get('bot_id')
     
     @property
     def email(self):
