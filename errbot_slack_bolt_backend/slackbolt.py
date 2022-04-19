@@ -301,7 +301,7 @@ class SlackRoomOccupant(RoomOccupant, SlackPerson):
         return self._room
     
     @property
-    def id(self):
+    def bot_id(self):
         return self._user.get('profile').get('bot_id')
     
     @property
@@ -367,7 +367,7 @@ class SlackRoomBot(RoomOccupant, SlackBot):
         return self._room
 
     @property
-    def id(self):
+    def bot_id(self):
         return self._bot_id        
 
     def __unicode__(self):
