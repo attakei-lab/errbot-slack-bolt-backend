@@ -2,10 +2,9 @@
 errbot-slack-bolt-backend
 =========================
 
-.. note::
-    
-   This package is experimental.
-   It is not guaranteed for running correctly and updating future.
+This backend implementation was originally created by `Attakei Lab <https://github.com/attakei-lab>`_. You can find the `repo here <https://github.com/attakei-lab/errbot-slack-bolt-backend>`_.
+
+We've introduced some important changes for retrieving users and channels, like pagination and support for different types (e.g. private_channels, public_channel).
 
 Overview
 ========
