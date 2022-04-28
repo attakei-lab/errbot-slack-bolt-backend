@@ -1251,6 +1251,15 @@ class SlackBoltBackend(ErrBot):
     def resolve_access_form_bot_id(self):
         bot_id = self.username_to_bot_id(self.bot_config.ACCESS_FORM_BOT_INFO.get('nickname'))
         self.bot_config.ACCESS_FORM_BOT_INFO['bot_id'] = bot_id
+    
+    def conversation_members(self, conversation):
+        return Utils.get_items(self.__get_conversation_members_page, kwargs={'channel': conversation.id})
+    
+    def __get_conversation_members_page(self, **kwargs):
+        response = self.webclient.conversation_members(limit=self.CONVERSATIONS_PAGE_LIMIT, **kwargs)
+        members = response['members']
+        next_cursor = response['response_metadata']['next_cursor']
+        return members, next_cursor
 
 
 class SlackRoom(Room):
@@ -1307,7 +1316,7 @@ class SlackRoom(Room):
     @property
     def private(self):
         """Return True if the room is a private group"""
-        return self._channel.id.startswith("G")
+        return self._channel.startswith("G")
 
     @property
     def id(self):
