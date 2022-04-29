@@ -1256,7 +1256,7 @@ class SlackBoltBackend(ErrBot):
         return Utils.get_items(self.__get_conversation_members_page, kwargs={'channel': conversation.id})
     
     def __get_conversation_members_page(self, **kwargs):
-        response = self.webclient.conversation_members(limit=self.CONVERSATIONS_PAGE_LIMIT, **kwargs)
+        response = self.webclient.conversations_members(limit=self.CONVERSATIONS_PAGE_LIMIT, **kwargs)
         members = response['members']
         next_cursor = response['response_metadata']['next_cursor']
         return members, next_cursor
