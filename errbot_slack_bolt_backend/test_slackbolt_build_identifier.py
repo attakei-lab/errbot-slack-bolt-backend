@@ -59,6 +59,15 @@ class Test_build_identifier:
         slack_room = mocked_backend_with_room.build_identifier('')
         assert isinstance(slack_room, SlackRoom)
         assert channelid == slack_room.id
+    
+    def test_fail_to_resolve_invalid_nick(self, mocked_backend_with_user):
+        mocked_backend_with_user.clear_users_cache()
+        mocked_backend_with_user.extract_identifiers_from_string = MagicMock(return_value=('invalid_user', None, None, None))
+        with pytest.raises(Exception) as ex:
+            mocked_backend_with_user.build_identifier('')
+        assert "Cannot find user @invalid_user" in str(ex.value)
+        assert "please use the tool" in str(ex.value)
+        assert "get-slack-handle.py" in str(ex.value)
 
 def inject_mocks():
     backend = SlackBoltBackend(SlackBoltBackendConfig())
