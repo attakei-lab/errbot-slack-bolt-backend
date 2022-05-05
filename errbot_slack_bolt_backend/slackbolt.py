@@ -1079,6 +1079,9 @@ class SlackBoltBackend(ErrBot):
 
         if userid is None and username is not None:
             user = self.__find_user('name', username)
+            if user is None:
+                raise Exception(f"Cannot find user @{username}. If you are trying to configure this user as an admin, "
+                                f"please use the tool https://github.com/strongdm/accessbot/blob/main/tools/get-slack-handle.py to find the correct nick for that user.")
             userid = user['id']
         if channelid is None and channelname is not None:
             channel = self.__find_conversation_by_name(channelname, types='public_channel,private_channel')
