@@ -99,7 +99,7 @@ class Utils:
     @staticmethod
     def get_item_by_key(data, key, value):
         for item in data:
-            if item[key] == value:
+            if item.get(key) == value:
                 return item
         return None
 
