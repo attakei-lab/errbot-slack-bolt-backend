@@ -674,6 +674,9 @@ class SlackBoltBackend(ErrBot):
             raise RoomDoesNotExistError(f"No channel named {name} exists")
         return channel["id"]
 
+    def __find_conversation(self, channelid):
+        return self.webclient.conversations_info(channel=channelid)
+
     def __find_conversation_by_name(self, name, is_first_call=True, **kwargs):
         conversations = self.__get_conversations(**kwargs)
         channel = Utils.get_item_by_key(conversations, 'name', name)
@@ -1011,6 +1014,7 @@ class SlackBoltBackend(ErrBot):
         Supports strings with the following formats::
 
             <#C12345>
+            <#C12345|>
             <@U12345>
             <@U12345|user>
             @user
@@ -1047,7 +1051,10 @@ class SlackBoltBackend(ErrBot):
                 else:
                     userid = text
             elif text[0] in ("C", "G", "D"):
-                channelid = text
+                if "|" in text:
+                    channelid, _ = text.split("|")
+                else:
+                    channelid = text
             else:
                 raise ValueError(exception_message % text)
         elif text[0] == "@":
@@ -1076,6 +1083,7 @@ class SlackBoltBackend(ErrBot):
         )
 
         user = None
+        channel = None
 
         if userid is None and username is not None:
             user = self.__find_user('name', username)
@@ -1093,6 +1101,8 @@ class SlackBoltBackend(ErrBot):
                 user = self.__find_user('id', userid)
             return SlackPerson(self.webclient, user, channelid=self.get_im_channel(userid))
         if channelid is not None:
+            if channel is None:
+                channel = self.__find_conversation(channelid)
             return SlackRoom(webclient=self.webclient, channelid=channelid, bot=self, is_archived=channel['is_archived'])
 
         raise Exception(
