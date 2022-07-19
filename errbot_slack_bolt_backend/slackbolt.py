@@ -1097,9 +1097,12 @@ class SlackBoltBackend(ErrBot):
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, user, channelid, bot=self)
         if userid is not None:
+            channel_id = None
             if user is None:
                 user = self.__find_user('id', userid)
-            return SlackPerson(self.webclient, user, channelid=self.get_im_channel(userid))
+            if user and not user.get('is_bot'):
+                channel_id = self.get_im_channel(userid)
+            return SlackPerson(self.webclient, user, channelid=channel_id)
         if channelid is not None:
             if channel is None:
                 channel = self.__find_conversation(channelid)
