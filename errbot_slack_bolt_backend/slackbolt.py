@@ -1,6 +1,7 @@
 import copyreg
 import json
 import logging
+import os
 import pprint
 import re
 import sys
@@ -91,6 +92,10 @@ def slack_markdown_converter(compact_output=False):
     md.preprocessors.register(LinkPreProcessor(md), "LinkPreProcessor", 40)
     md.stripTopLevelTags = False
     return md
+
+
+def default_slack_conversations_types():
+    return os.getenv("SDM_SLACK_CONVERSATIONS_TYPES", "public_channel,private_channel")
 
 
 class Utils:
@@ -388,9 +393,9 @@ class SlackRoomBot(RoomOccupant, SlackBot):
 
 
 class SlackBoltBackend(ErrBot):
-    USERS_PAGE_LIMIT = 500
-    CONVERSATIONS_PAGE_LIMIT = 500
-    CACHE_TTL_SECONDS = 4 * 60 * 60
+    USERS_PAGE_LIMIT = int(os.getenv("SDM_SLACK_USERS_PAGE_LIMIT", 500))
+    CONVERSATIONS_PAGE_LIMIT = int(os.getenv("SDM_SLACK_CONVERSATIONS_PAGE_LIMIT", 500))
+    CACHE_TTL_SECONDS = int(os.getenv("SDM_SLACK_CACHE_TTL_SECONDS", 4 * 60 * 60))
 
     @staticmethod
     def _unpickle_identifier(identifier_str):
@@ -666,7 +671,7 @@ class SlackBoltBackend(ErrBot):
             raise RoomDoesNotExistError(f"No channel with ID {id_} exists.")
         return channel["name"]
 
-    def channelname_to_channelid(self, name: str, types='public_channel,private_channel'):
+    def channelname_to_channelid(self, name: str, types=default_slack_conversations_types()):
         """Convert a Slack channel name to its channel ID"""
         name = name.lstrip("#")
         channel = self.__find_conversation_by_name(name, types=types)
@@ -704,7 +709,7 @@ class SlackBoltBackend(ErrBot):
         response = self.webclient.users_profile_get(user=user, include_labels=True)
         return response['profile']
 
-    def channels(self, exclude_archived=True, joined_only=False, types='public_channel,private_channel'):
+    def channels(self, exclude_archived=True, joined_only=False, types=default_slack_conversations_types()):
         """
         Get all channels and groups and return information about them.
 
@@ -1092,7 +1097,7 @@ class SlackBoltBackend(ErrBot):
                                 f"please use the tool https://github.com/strongdm/accessbot/blob/main/tools/get-slack-handle.py to find the correct nick for that user.")
             userid = user['id']
         if channelid is None and channelname is not None:
-            channel = self.__find_conversation_by_name(channelname, types='public_channel,private_channel')
+            channel = self.__find_conversation_by_name(channelname, types=default_slack_conversations_types())
             channelid = channel['id'] if channel is not None else None
         if userid is not None and channelid is not None:
             return SlackRoomOccupant(self.webclient, user, channelid, bot=self)
